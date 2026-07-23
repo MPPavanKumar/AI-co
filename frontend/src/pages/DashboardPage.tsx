@@ -1,154 +1,192 @@
-import { FileText, Building2, Brain, TrendingUp, Zap, ArrowRight, Sparkles, Target, Clock } from 'lucide-react'
+import { FileText, Building2, Brain, TrendingUp, ArrowRight, Sparkles, Clock, CheckCircle2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { clsx } from 'clsx'
 import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
+import { Skeleton } from '../components/ui/Skeleton'
 import { useAuthStore } from '../store/authStore'
-
-const statsCards = [
-  {
-    label: 'ATS Score',
-    value: '—',
-    description: 'Upload your resume to get your score',
-    icon: FileText,
-    color: 'text-primary-400',
-    bg: 'bg-primary-500/10',
-    border: 'border-primary-500/20',
-    badge: 'Not analyzed',
-    badgeVariant: 'neutral' as const,
-  },
-  {
-    label: 'Company Match',
-    value: '—',
-    description: 'Match your profile to a job description',
-    icon: Building2,
-    color: 'text-violet-400',
-    bg: 'bg-violet-500/10',
-    border: 'border-violet-500/20',
-    badge: 'Not matched',
-    badgeVariant: 'neutral' as const,
-  },
-  {
-    label: 'Interviews Done',
-    value: '0',
-    description: 'Practice makes perfect',
-    icon: Brain,
-    color: 'text-cyan-400',
-    bg: 'bg-cyan-500/10',
-    border: 'border-cyan-500/20',
-    badge: '0 sessions',
-    badgeVariant: 'neutral' as const,
-  },
-  {
-    label: 'Prep Score',
-    value: '0%',
-    description: 'Overall preparation progress',
-    icon: TrendingUp,
-    color: 'text-emerald-400',
-    bg: 'bg-emerald-500/10',
-    border: 'border-emerald-500/20',
-    badge: 'Just started',
-    badgeVariant: 'neutral' as const,
-  },
-]
-
-const quickActions = [
-  {
-    to: '/resume',
-    icon: FileText,
-    title: 'Analyze Resume',
-    description: 'Get ATS score and improvement tips',
-    color: 'from-primary-600 to-violet-600',
-    glow: 'shadow-glow-primary',
-  },
-  {
-    to: '/company-match',
-    icon: Target,
-    title: 'Match to JD',
-    description: 'See how well you fit a job description',
-    color: 'from-violet-600 to-purple-600',
-    glow: 'shadow-glow-purple',
-  },
-  {
-    to: '/interview',
-    icon: Brain,
-    title: 'Practice Interview',
-    description: 'Get AI feedback on your answers',
-    color: 'from-cyan-600 to-blue-600',
-    glow: '',
-  },
-]
+import { useDashboardSummary } from '../hooks/useDashboard'
 
 export default function DashboardPage() {
-  const { user } = useAuthStore()
-  const firstName = user?.full_name?.split(' ')[0] ?? 'there'
-  const hour = new Date().getHours()
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const user = useAuthStore((state) => state.user)
+  const { data: summary, isLoading } = useDashboardSummary()
+
+  const statsCards = [
+    {
+      label: 'Avg ATS Score',
+      value: summary?.avg_ats_score !== null && summary?.avg_ats_score !== undefined ? `${summary.avg_ats_score}%` : '—',
+      subtext: `Total Resumes: ${summary?.total_resumes ?? 0}`,
+      icon: FileText,
+      color: 'text-primary-400',
+      bg: 'bg-primary-500/10',
+    },
+    {
+      label: 'Avg Job Match',
+      value: summary?.avg_match_score !== null && summary?.avg_match_score !== undefined ? `${summary.avg_match_score}%` : '—',
+      subtext: `Saved JDs: ${summary?.total_jds ?? 0}`,
+      icon: Building2,
+      color: 'text-violet-400',
+      bg: 'bg-violet-500/10',
+    },
+    {
+      label: 'Avg Mock Interview',
+      value: summary?.avg_interview_score !== null && summary?.avg_interview_score !== undefined ? `${summary.avg_interview_score}%` : '—',
+      subtext: `Total Sessions: ${summary?.total_interviews ?? 0}`,
+      icon: Brain,
+      color: 'text-emerald-400',
+      bg: 'bg-emerald-500/10',
+    },
+  ]
+
+  const quickActions = [
+    {
+      title: 'Resume Analyzer',
+      description: 'Upload your PDF resume to get ATS scores, missing keywords, and layout tips.',
+      href: '/resume',
+      icon: FileText,
+      badge: 'Core Feature',
+      badgeVariant: 'primary' as const,
+    },
+    {
+      title: 'Company Job Match',
+      description: 'Compare your resume against specific target Job Descriptions to spot skill gaps.',
+      href: '/company-match',
+      icon: Building2,
+      badge: 'High Impact',
+      badgeVariant: 'warning' as const,
+    },
+    {
+      title: 'AI Mock Interview',
+      description: 'Practice role-specific interview questions with instant evaluation and model answers.',
+      href: '/interview',
+      icon: Brain,
+      badge: 'Interactive',
+      badgeVariant: 'success' as const,
+    },
+  ]
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in">
       {/* Welcome Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary-900/60 via-dark-card to-violet-900/40 border border-primary-500/20 p-6 md:p-8">
-        <div className="absolute top-0 right-0 w-72 h-72 bg-primary-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-1/3 w-48 h-48 bg-violet-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative">
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="w-4 h-4 text-primary-400" />
-                <span className="text-xs text-primary-400 font-medium uppercase tracking-wider">AI Platform</span>
-              </div>
-              <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
-                {greeting}, {firstName} 👋
-              </h1>
-              <p className="text-dark-muted text-sm max-w-md">
-                Your AI-powered placement preparation hub. Analyze your resume, match with companies,
-                and ace your interviews.
-              </p>
-            </div>
-            <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-primary-500/10 border border-primary-500/20">
-              <Zap className="w-4 h-4 text-primary-400" />
-              <span className="text-sm text-primary-300 font-medium">Ready to prep</span>
-            </div>
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary-900/60 via-dark-card to-violet-950/40 border border-primary-500/20 p-6 md:p-8">
+        <div className="relative z-10 space-y-2 max-w-2xl">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary-500/10 border border-primary-500/20 text-xs font-semibold text-primary-300">
+            <Sparkles className="w-3.5 h-3.5" />
+            AI Placement Preparation Engine
           </div>
+          <h1 className="text-2xl md:text-3xl font-extrabold text-white">
+            Welcome back, {user?.full_name ?? user?.email ?? 'Candidate'} 👋
+          </h1>
+          <p className="text-sm text-slate-300">
+            Upload your resume, match with target job descriptions, and practice AI mock interviews to maximize your placement readiness.
+          </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        {statsCards.map((stat) => (
-          <Card key={stat.label} padding="sm" hoverable className="flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <div className={clsx("w-10 h-10 rounded-xl flex items-center justify-center border", stat.bg, stat.color, stat.border)}>
-                <stat.icon className="w-5 h-5" />
-              </div>
-              <Badge variant={stat.badgeVariant}>{stat.badge}</Badge>
-            </div>
-            <p className="text-dark-muted text-sm font-medium mb-1">{stat.label}</p>
-            <p className="text-2xl font-bold text-white mb-1">{stat.value}</p>
-            <p className="text-xs text-dark-muted mt-auto">{stat.description}</p>
-          </Card>
-        ))}
+      {/* Metrics Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {statsCards.map((card, idx) => {
+          const Icon = card.icon
+          return (
+            <Card key={idx} padding="md" hoverable>
+              {isLoading ? (
+                <Skeleton className="h-20 w-full" />
+              ) : (
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      {card.label}
+                    </p>
+                    <p className="text-3xl font-black text-white mt-1">{card.value}</p>
+                    <p className="text-xs text-slate-400 mt-1">{card.subtext}</p>
+                  </div>
+                  <div className={`p-3 rounded-xl ${card.bg}`}>
+                    <Icon className={`w-6 h-6 ${card.color}`} />
+                  </div>
+                </div>
+              )}
+            </Card>
+          )
+        })}
       </div>
 
-      <div>
-        <h2 className="text-lg font-bold text-white mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-          {quickActions.map((action) => (
-            <Link key={action.to} to={action.to} className="group block">
-              <Card hoverable className="h-full relative overflow-hidden flex flex-col justify-between">
-                <div className={clsx("absolute top-0 right-0 w-32 h-32 bg-gradient-to-br opacity-20 blur-2xl rounded-full transition-transform duration-500 group-hover:scale-150", action.color)} />
-                <div className="relative z-10 mb-4">
-                  <action.icon className={clsx("w-8 h-8 mb-4", action.glow ? "text-primary-400" : "text-cyan-400")} />
-                  <h3 className="text-lg font-semibold text-white mb-2">{action.title}</h3>
-                  <p className="text-sm text-dark-muted">{action.description}</p>
+      {/* Quick Actions Grid */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-primary-400" />
+          Preparation Modules
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {quickActions.map((action, idx) => {
+            const Icon = action.icon
+            return (
+              <Card key={idx} padding="lg" hoverable className="flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="p-3 rounded-xl bg-primary-500/10 border border-primary-500/20 text-primary-400">
+                      <Icon className="w-6 h-6" />
+                    </div>
+                    <Badge variant={action.badgeVariant}>{action.badge}</Badge>
+                  </div>
+                  <h3 className="text-base font-bold text-white">{action.title}</h3>
+                  <p className="text-xs text-slate-400 leading-relaxed">{action.description}</p>
                 </div>
-                <div className="relative z-10 flex items-center text-sm font-medium text-primary-400 group-hover:text-primary-300 transition-colors mt-4">
-                  Get started <ArrowRight className="w-4 h-4 ml-1 transform group-hover:translate-x-1 transition-transform" />
+                <div className="pt-4 mt-4 border-t border-dark-border">
+                  <Link
+                    to={action.href}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-400 hover:text-primary-300 transition-colors"
+                  >
+                    Launch Module <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
                 </div>
               </Card>
-            </Link>
-          ))}
+            )
+          })}
         </div>
+      </div>
+
+      {/* Unified Recent Activity Timeline */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-bold text-white flex items-center gap-2">
+          <Clock className="w-5 h-5 text-violet-400" />
+          Recent Activity Feed
+        </h2>
+        <Card padding="md">
+          {isLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : !summary?.recent_activity || summary.recent_activity.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 text-xs">
+              No recent activity yet. Upload a resume or match a job description to get started!
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {summary.recent_activity.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between p-3 rounded-xl bg-dark-card border border-dark-border text-xs"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-primary-500/10 text-primary-400">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-white">{item.title}</p>
+                      <p className="text-slate-400 text-[11px]">
+                        {new Date(item.timestamp).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    {item.score !== null && (
+                      <Badge variant={item.score >= 75 ? 'success' : 'warning'}>
+                        Score: {item.score}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-import { HTMLAttributes } from 'react'
+import type { HTMLAttributes } from 'react'
 import { clsx } from 'clsx'
 
 interface CardProps extends HTMLAttributes<HTMLDivElement> {

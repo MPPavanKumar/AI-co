@@ -31,7 +31,8 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
     if (error.response?.status === 401) {
-      const detail = error.response?.data?.detail
+      const data = error.response?.data as { detail?: string } | undefined
+      const detail = data?.detail
       const detailStr = typeof detail === 'string' ? detail.toLowerCase() : ''
 
       // Only force logout if the 401 error is actually a user auth/token issue

@@ -11,7 +11,7 @@ from fastapi.responses import RedirectResponse
 
 from core.config import settings
 from core.database import engine, Base
-from routers import auth, resume
+from routers import auth, resume, job, interview, dashboard
 
 
 import openai
@@ -94,6 +94,9 @@ app.add_middleware(
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(resume.router, prefix="/api/v1")
+app.include_router(job.router, prefix="/api/v1")
+app.include_router(interview.router, prefix="/api/v1")
+app.include_router(dashboard.router, prefix="/api/v1")
 
 
 # ── Health Check ──────────────────────────────────────────────────────────────

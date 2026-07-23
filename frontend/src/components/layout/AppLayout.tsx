@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
   FileText,
@@ -8,7 +8,6 @@ import {
   User,
   LogOut,
   Menu,
-  X,
   Sparkles,
   Moon,
   Sun,

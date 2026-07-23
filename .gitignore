@@ -18,6 +18,7 @@ env/
 .env.local
 .env.production
 *.env
+!*.env.example
 
 # IDE
 .vscode/
@@ -46,3 +47,4 @@ backend/alembic/versions/__pycache__/
 
 # Uploads
 backend/uploads/
+*.db

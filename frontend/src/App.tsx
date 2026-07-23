@@ -6,6 +6,8 @@ import RegisterPage from './pages/auth/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
 import ProfilePage from './pages/ProfilePage'
 import ResumePage from './pages/ResumePage'
+import JobMatchPage from './pages/JobMatchPage'
+import InterviewPage from './pages/InterviewPage'
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -27,6 +29,8 @@ export default function App() {
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="resume" element={<ResumePage />} />
+        <Route path="company-match" element={<JobMatchPage />} />
+        <Route path="interview" element={<InterviewPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
 

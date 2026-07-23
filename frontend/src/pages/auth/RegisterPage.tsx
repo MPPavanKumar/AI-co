@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
-  Eye, EyeOff, Mail, Lock, User, GraduationCap, Building, BookOpen, ArrowRight, Sparkles,
+  Eye, EyeOff, Mail, Lock, User, GraduationCap, ArrowRight, Sparkles,
 } from 'lucide-react'
 import { registerSchema, type RegisterFormData } from '../../lib/validations/auth'
 import { useRegister } from '../../hooks/useAuth'

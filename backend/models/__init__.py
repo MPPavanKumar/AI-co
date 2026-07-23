@@ -1,3 +1,10 @@
-# Import all models so Alembic detects them and Base.metadata is populated
-from .user import User  # noqa: F401
-from .resume import ResumeAnalysis  # noqa: F401
+"""
+Database models export package.
+"""
+from models.user import User
+from models.resume import ResumeAnalysis
+from models.job_description import JobDescription
+from models.job_match import JobMatch
+from models.interview import InterviewSession
+
+__all__ = ["User", "ResumeAnalysis", "JobDescription", "JobMatch", "InterviewSession"]
