@@ -1,0 +1,449 @@
+import { useState, useCallback } from 'react'
+import { useDropzone } from 'react-dropzone'
+import {
+  Upload, FileText, CheckCircle, XCircle, Lightbulb,
+  TrendingUp, AlertTriangle, Target, Clock, ChevronDown,
+  ChevronUp, Sparkles, RefreshCw, Star,
+} from 'lucide-react'
+import { clsx } from 'clsx'
+import { useUploadResume, useResumeAnalyses, useResumeById } from '../hooks/useResume'
+import type { ResumeAnalysis, ResumeListItem } from '../types/resume'
+
+// ── ATS Score Ring ────────────────────────────────────────────────────────────
+function ATSScoreRing({ score }: { score: number }) {
+  const radius = 52
+  const circumference = 2 * Math.PI * radius
+  const offset = circumference - (score / 100) * circumference
+
+  const color =
+    score >= 80 ? '#10b981' : score >= 60 ? '#6366f1' : score >= 40 ? '#f59e0b' : '#ef4444'
+  const label =
+    score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : score >= 40 ? 'Average' : 'Needs Work'
+
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div className="relative w-36 h-36">
+        <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r={radius} fill="none" stroke="#1e1e3f" strokeWidth="10" />
+          <circle
+            cx="60" cy="60" r={radius} fill="none"
+            stroke={color} strokeWidth="10" strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            style={{ transition: 'stroke-dashoffset 1.2s ease-in-out' }}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-3xl font-bold text-white">{score}</span>
+          <span className="text-xs text-gray-500">/100</span>
+        </div>
+      </div>
+      <div className="text-center">
+        <p className="text-sm font-semibold text-white">ATS Score</p>
+        <p className="text-xs mt-0.5 font-medium" style={{ color }}>{label}</p>
+      </div>
+    </div>
+  )
+}
+
+// ── Skill Chip ────────────────────────────────────────────────────────────────
+function SkillChip({ label, variant }: { label: string; variant: 'found' | 'missing' }) {
+  return (
+    <span className={clsx(
+      'inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium border transition-all',
+      variant === 'found'
+        ? 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/25'
+        : 'bg-red-500/15 text-red-300 border-red-500/30 hover:bg-red-500/25'
+    )}>
+      {variant === 'found' ? '✓' : '✗'} {label}
+    </span>
+  )
+}
+
+// ── Upload Zone ───────────────────────────────────────────────────────────────
+function UploadZone({ onUpload, isUploading }: { onUpload: (f: File) => void; isUploading: boolean }) {
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    accept: { 'application/pdf': ['.pdf'] },
+    maxSize: 5 * 1024 * 1024,
+    multiple: false,
+    onDropAccepted: (files) => onUpload(files[0]),
+    onDropRejected: () => {
+      import('react-hot-toast').then(({ default: toast }) =>
+        toast.error('Please upload a PDF under 5 MB.')
+      )
+    },
+    disabled: isUploading,
+  })
+
+  return (
+    <div
+      {...getRootProps()}
+      className={clsx(
+        'relative border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all duration-300',
+        isDragActive
+          ? 'border-indigo-500 bg-indigo-500/10 scale-[1.02]'
+          : 'border-[#1e1e3f] hover:border-indigo-500/50 hover:bg-indigo-500/5',
+        isUploading && 'opacity-60 cursor-not-allowed pointer-events-none'
+      )}
+    >
+      <input {...getInputProps()} />
+      <div className="flex flex-col items-center gap-3">
+        <div className={clsx(
+          'w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300',
+          isDragActive ? 'bg-indigo-500/20 scale-110' : 'bg-[#0f0f20]'
+        )}>
+          {isUploading
+            ? <RefreshCw className="w-7 h-7 text-indigo-400 animate-spin" />
+            : <Upload className={clsx('w-7 h-7 transition-colors', isDragActive ? 'text-indigo-400' : 'text-gray-500')} />
+          }
+        </div>
+
+        {isUploading ? (
+          <div className="space-y-2">
+            <p className="text-white font-semibold text-sm">Analyzing your resume...</p>
+            <p className="text-xs text-gray-500">Gemini AI is reviewing. This takes ~10 seconds.</p>
+            <div className="w-40 h-1 bg-[#1e1e3f] rounded-full overflow-hidden mx-auto mt-2">
+              <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full animate-pulse w-3/4" />
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p className="text-white font-semibold text-sm">
+              {isDragActive ? 'Drop it here!' : 'Drag & drop your resume'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              or <span className="text-indigo-400 font-medium">click to browse</span>
+            </p>
+            <p className="text-xs text-gray-600 mt-2">PDF only · Max 5 MB</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── History Item ──────────────────────────────────────────────────────────────
+function HistoryItem({
+  item, isSelected, onClick
+}: { item: ResumeListItem; isSelected: boolean; onClick: () => void }) {
+  const scoreColor = (s: number | null) => {
+    if (!s) return 'text-gray-500'
+    if (s >= 80) return 'text-emerald-400'
+    if (s >= 60) return 'text-indigo-400'
+    if (s >= 40) return 'text-amber-400'
+    return 'text-red-400'
+  }
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        'w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all duration-200',
+        isSelected
+          ? 'bg-indigo-500/15 border border-indigo-500/30'
+          : 'hover:bg-[#0f0f20] border border-transparent'
+      )}
+    >
+      <div className="w-8 h-8 rounded-lg bg-[#0f0f20] flex items-center justify-center flex-shrink-0">
+        <FileText className="w-4 h-4 text-indigo-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium text-white truncate">{item.filename}</p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          {new Date(item.created_at).toLocaleDateString('en-IN', {
+            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+          })}
+        </p>
+      </div>
+      <span className={clsx('text-base font-bold flex-shrink-0', scoreColor(item.ats_score))}>
+        {item.ats_score ?? '—'}
+      </span>
+    </button>
+  )
+}
+
+// ── Analysis Results ──────────────────────────────────────────────────────────
+function AnalysisResults({ analysis }: { analysis: ResumeAnalysis }) {
+  const [showAllSuggestions, setShowAllSuggestions] = useState(false)
+
+  const stats = [
+    { label: 'Skills Found', value: analysis.skills_detected.length, icon: CheckCircle, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+    { label: 'Missing Keywords', value: analysis.missing_keywords.length, icon: XCircle, color: 'text-red-400', bg: 'bg-red-500/10' },
+    { label: 'AI Suggestions', value: analysis.suggestions.length, icon: Lightbulb, color: 'text-amber-400', bg: 'bg-amber-500/10' },
+  ]
+
+  return (
+    <div className="space-y-5 animate-fade-in">
+      {/* Top row */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Score ring */}
+        <div className="glass-card p-6 flex items-center justify-center">
+          <ATSScoreRing score={analysis.ats_score ?? 0} />
+        </div>
+
+        {/* Quick stats */}
+        <div className="md:col-span-3 grid grid-cols-3 gap-4">
+          {stats.map((s) => (
+            <div key={s.label} className="glass-card p-4">
+              <div className={clsx('w-9 h-9 rounded-xl flex items-center justify-center mb-3', s.bg)}>
+                <s.icon className={clsx('w-4 h-4', s.color)} />
+              </div>
+              <p className="text-2xl font-bold text-white">{s.value}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* File info strip */}
+      <div className="glass-card px-4 py-3 flex items-center gap-3">
+        <FileText className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+        <span className="text-sm text-white font-medium truncate">{analysis.filename}</span>
+        {analysis.file_size && (
+          <span className="text-xs text-gray-500 ml-auto flex-shrink-0">
+            {(analysis.file_size / 1024).toFixed(1)} KB
+          </span>
+        )}
+      </div>
+
+      {/* Skills detected */}
+      {analysis.skills_detected.length > 0 && (
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+              <CheckCircle className="w-4 h-4 text-emerald-400" />
+            </div>
+            <h3 className="font-semibold text-white text-sm">Skills Detected</h3>
+            <span className="ml-auto text-xs bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full">
+              {analysis.skills_detected.length} found
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {analysis.skills_detected.map((skill) => (
+              <SkillChip key={skill} label={skill} variant="found" />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Missing keywords */}
+      {analysis.missing_keywords.length > 0 && (
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
+              <XCircle className="w-4 h-4 text-red-400" />
+            </div>
+            <h3 className="font-semibold text-white text-sm">Missing Keywords</h3>
+            <span className="ml-auto text-xs bg-red-500/20 text-red-300 px-2 py-0.5 rounded-full">
+              {analysis.missing_keywords.length} missing
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {analysis.missing_keywords.map((kw) => (
+              <SkillChip key={kw} label={kw} variant="missing" />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Strengths + Weaknesses */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
+            </div>
+            <h3 className="font-semibold text-white text-sm">Strengths</h3>
+          </div>
+          <ul className="space-y-2">
+            {analysis.strengths.map((s, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
+                <span className="text-emerald-400 mt-0.5 flex-shrink-0 font-bold">✓</span>
+                <span>{s}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center">
+              <AlertTriangle className="w-4 h-4 text-red-400" />
+            </div>
+            <h3 className="font-semibold text-white text-sm">Areas to Improve</h3>
+          </div>
+          <ul className="space-y-2">
+            {analysis.weaknesses.map((w, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
+                <span className="text-red-400 mt-0.5 flex-shrink-0 font-bold">!</span>
+                <span>{w}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+
+      {/* AI Suggestions */}
+      {analysis.suggestions.length > 0 && (
+        <div className="glass-card p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
+              <Lightbulb className="w-4 h-4 text-amber-400" />
+            </div>
+            <h3 className="font-semibold text-white text-sm">AI Suggestions</h3>
+            <span className="ml-auto text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full">
+              {analysis.suggestions.length} tips
+            </span>
+          </div>
+          <ol className="space-y-3">
+            {(showAllSuggestions ? analysis.suggestions : analysis.suggestions.slice(0, 4)).map((tip, i) => (
+              <li key={i} className="flex items-start gap-3">
+                <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold flex items-center justify-center">
+                  {i + 1}
+                </span>
+                <p className="text-sm text-gray-300 leading-relaxed">{tip}</p>
+              </li>
+            ))}
+          </ol>
+          {analysis.suggestions.length > 4 && (
+            <button
+              onClick={() => setShowAllSuggestions(!showAllSuggestions)}
+              className="mt-4 flex items-center gap-1 text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+            >
+              {showAllSuggestions
+                ? <><ChevronUp className="w-4 h-4" /> Show less</>
+                : <><ChevronDown className="w-4 h-4" /> Show {analysis.suggestions.length - 4} more</>
+              }
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Loading Skeleton ──────────────────────────────────────────────────────────
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4 animate-pulse">
+      <div className="grid grid-cols-4 gap-4">
+        <div className="glass-card h-44 rounded-2xl bg-[#1e1e3f]/40" />
+        <div className="col-span-3 grid grid-cols-3 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="glass-card h-28 rounded-2xl bg-[#1e1e3f]/40" />
+          ))}
+        </div>
+      </div>
+      <div className="glass-card h-32 rounded-2xl bg-[#1e1e3f]/40" />
+      <div className="grid grid-cols-2 gap-4">
+        <div className="glass-card h-40 rounded-2xl bg-[#1e1e3f]/40" />
+        <div className="glass-card h-40 rounded-2xl bg-[#1e1e3f]/40" />
+      </div>
+      <div className="glass-card h-48 rounded-2xl bg-[#1e1e3f]/40" />
+    </div>
+  )
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+export default function ResumePage() {
+  const { mutate: uploadResume, isPending: isUploading, data: uploadResult } = useUploadResume()
+  const { data: analyses } = useResumeAnalyses()
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const { data: selectedAnalysis } = useResumeById(selectedId)
+
+  const displayAnalysis = selectedAnalysis ?? uploadResult?.analysis ?? null
+
+  const handleUpload = useCallback(
+    (file: File) => {
+      setSelectedId(null)
+      uploadResume(file)
+    },
+    [uploadResume]
+  )
+
+  return (
+    <div className="max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="mb-7">
+        <div className="flex items-center gap-2 mb-1">
+          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+          <span className="text-xs text-indigo-400 font-medium uppercase tracking-wider">AI Powered</span>
+        </div>
+        <h1 className="text-2xl font-bold text-white">Resume Analyzer</h1>
+        <p className="text-gray-500 text-sm mt-1">
+          Upload your PDF resume and get an ATS score, skill gap analysis, and actionable improvements.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
+        {/* Left column: Upload + History */}
+        <div className="lg:col-span-1 space-y-4">
+          <div className="glass-card p-4">
+            <UploadZone onUpload={handleUpload} isUploading={isUploading} />
+          </div>
+
+          {/* Tips */}
+          <div className="glass-card p-4 space-y-2">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Tips</p>
+            {[
+              'Use a single-column ATS-friendly layout',
+              'Include measurable achievements',
+              'Match keywords from the job description',
+            ].map((tip, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <Star className="w-3 h-3 text-amber-400 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-gray-400">{tip}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* History */}
+          {analyses && analyses.length > 0 && (
+            <div className="glass-card p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="w-4 h-4 text-gray-500" />
+                <span className="text-sm font-medium text-white">History</span>
+                <span className="ml-auto text-xs bg-[#1e1e3f] text-gray-400 px-2 py-0.5 rounded-full">
+                  {analyses.length}
+                </span>
+              </div>
+              <div className="space-y-1">
+                {analyses.map((item) => (
+                  <HistoryItem
+                    key={item.id}
+                    item={item}
+                    isSelected={selectedId === item.id}
+                    onClick={() => {
+                      setSelectedId(item.id)
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Right column: Results */}
+        <div className="lg:col-span-3">
+          {isUploading && <LoadingSkeleton />}
+
+          {!isUploading && displayAnalysis && (
+            <AnalysisResults analysis={displayAnalysis} />
+          )}
+
+          {!isUploading && !displayAnalysis && (
+            <div className="glass-card flex flex-col items-center justify-center py-24 text-center">
+              <div className="w-20 h-20 rounded-3xl bg-indigo-500/10 flex items-center justify-center mb-6">
+                <Target className="w-10 h-10 text-indigo-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">Ready to Analyze</h3>
+              <p className="text-gray-500 text-sm max-w-xs">
+                Upload your PDF resume on the left to get your ATS score, detect skill gaps,
+                and receive AI-powered improvement tips.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
