@@ -40,7 +40,7 @@ export default function InterviewPage() {
 
   // Store Candidate Answers & Code per question_id
   const [answersMap, setAnswersMap] = useState<Record<number, string>>({})
-  const [codeMap, setCodeMap] = useState<Record<number, string>>({})
+  const [codeMap, setCodeMap] = useState<Record<string, string>>({})
   const [languageMap, setLanguageMap] = useState<Record<number, ProgrammingLanguage>>({})
   const [statusMap, setStatusMap] = useState<Record<number, QuestionStatus>>({})
 
@@ -106,8 +106,9 @@ export default function InterviewPage() {
 
   const currentQ = activeSession?.questions[currentQIndex]
   const currentLang = currentQ ? languageMap[currentQ.id] ?? 'python' : 'python'
+  const currentCodeKey = currentQ ? `${currentQ.id}_${currentLang}` : ''
   const currentCode = currentQ
-    ? codeMap[currentQ.id] ?? (currentQ.starter_code_templates?.[currentLang] || DEFAULT_STARTER_TEMPLATES[currentLang])
+    ? codeMap[currentCodeKey] ?? (currentQ.starter_code_templates?.[currentLang] || DEFAULT_STARTER_TEMPLATES[currentLang])
     : ''
   const currentAnswer = currentQ ? answersMap[currentQ.id] ?? '' : ''
 
@@ -483,9 +484,10 @@ export default function InterviewPage() {
                                 type="button"
                                 onClick={() => {
                                   setLanguageMap((prev) => ({ ...prev, [currentQ.id]: lang }))
-                                  if (!codeMap[currentQ.id]) {
+                                  const langKey = `${currentQ.id}_${lang}`
+                                  if (!codeMap[langKey]) {
                                     const template = currentQ.starter_code_templates?.[lang] || DEFAULT_STARTER_TEMPLATES[lang]
-                                    setCodeMap((prev) => ({ ...prev, [currentQ.id]: template }))
+                                    setCodeMap((prev) => ({ ...prev, [langKey]: template }))
                                   }
                                 }}
                                 className={`px-2.5 py-1 rounded-lg text-xs font-semibold uppercase transition-all ${
@@ -506,7 +508,7 @@ export default function InterviewPage() {
                           className="w-full bg-dark-card border border-dark-border rounded-xl p-4 font-mono text-xs text-emerald-300 focus:outline-none focus:ring-2 focus:ring-primary-500/50 resize-y leading-relaxed"
                           value={currentCode}
                           onChange={(e) => {
-                            setCodeMap((prev) => ({ ...prev, [currentQ.id]: e.target.value }))
+                            setCodeMap((prev) => ({ ...prev, [currentCodeKey]: e.target.value }))
                             setStatusMap((prev) => ({ ...prev, [currentQ.id]: 'answered' }))
                           }}
                         />

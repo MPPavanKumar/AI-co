@@ -192,3 +192,13 @@ class ResumeService:
             .limit(1)
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def delete_analysis(
+        db: AsyncSession, analysis_id: uuid.UUID, user_id: uuid.UUID
+    ) -> bool:
+        """Delete a resume analysis owned by the user."""
+        analysis = await ResumeService.get_analysis_by_id(db, analysis_id, user_id)
+        await db.delete(analysis)
+        await db.commit()
+        return True

@@ -3,10 +3,10 @@ import { useDropzone } from 'react-dropzone'
 import {
   Upload, FileText, CheckCircle, XCircle, Lightbulb,
   TrendingUp, AlertTriangle, Target, Clock, ChevronDown,
-  ChevronUp, Sparkles, RefreshCw, Star,
+  ChevronUp, Sparkles, RefreshCw, Star, Trash2,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { useUploadResume, useResumeAnalyses, useResumeById } from '../hooks/useResume'
+import { useUploadResume, useResumeAnalyses, useResumeById, useDeleteResumeAnalysis } from '../hooks/useResume'
 import type { ResumeAnalysis, ResumeListItem } from '../types/resume'
 
 // ── ATS Score Ring ────────────────────────────────────────────────────────────
@@ -124,8 +124,8 @@ function UploadZone({ onUpload, isUploading }: { onUpload: (f: File) => void; is
 
 // ── History Item ──────────────────────────────────────────────────────────────
 function HistoryItem({
-  item, isSelected, onClick
-}: { item: ResumeListItem; isSelected: boolean; onClick: () => void }) {
+  item, isSelected, onClick, onDelete
+}: { item: ResumeListItem; isSelected: boolean; onClick: () => void; onDelete: (e: React.MouseEvent) => void }) {
   const scoreColor = (s: number | null) => {
     if (!s) return 'text-gray-500'
     if (s >= 80) return 'text-emerald-400'
@@ -134,30 +134,45 @@ function HistoryItem({
     return 'text-red-400'
   }
   return (
-    <button
+    <div
       onClick={onClick}
       className={clsx(
-        'w-full flex items-center gap-3 p-3 rounded-xl text-left transition-all duration-200',
+        'w-full flex items-center justify-between gap-3 p-3 rounded-xl cursor-pointer transition-all duration-200 group',
         isSelected
           ? 'bg-indigo-500/15 border border-indigo-500/30'
           : 'hover:bg-[#0f0f20] border border-transparent'
       )}
     >
-      <div className="w-8 h-8 rounded-lg bg-[#0f0f20] flex items-center justify-center flex-shrink-0">
-        <FileText className="w-4 h-4 text-indigo-400" />
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="w-8 h-8 rounded-lg bg-[#0f0f20] flex items-center justify-center flex-shrink-0">
+          <FileText className="w-4 h-4 text-indigo-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-white truncate">{item.filename}</p>
+          <p className="text-xs text-gray-500 mt-0.5">
+            {new Date(item.created_at).toLocaleDateString('en-IN', {
+              day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+            })}
+          </p>
+        </div>
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-white truncate">{item.filename}</p>
-        <p className="text-xs text-gray-500 mt-0.5">
-          {new Date(item.created_at).toLocaleDateString('en-IN', {
-            day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-          })}
-        </p>
+      <div className="flex items-center gap-2">
+        <span className={clsx('text-base font-bold flex-shrink-0', scoreColor(item.ats_score))}>
+          {item.ats_score ?? '—'}
+        </span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete(e)
+          }}
+          className="p-1 text-[#64748b] hover:text-red-400 rounded-lg hover:bg-[#1e1e3f] transition-colors opacity-80 group-hover:opacity-100"
+          title="Delete Resume Analysis"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
-      <span className={clsx('text-base font-bold flex-shrink-0', scoreColor(item.ats_score))}>
-        {item.ats_score ?? '—'}
-      </span>
-    </button>
+    </div>
   )
 }
 
@@ -347,6 +362,7 @@ function LoadingSkeleton() {
 export default function ResumePage() {
   const { mutate: uploadResume, isPending: isUploading, data: uploadResult } = useUploadResume()
   const { data: analyses } = useResumeAnalyses()
+  const deleteAnalysisMutation = useDeleteResumeAnalysis()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const { data: selectedAnalysis } = useResumeById(selectedId)
 
@@ -414,6 +430,10 @@ export default function ResumePage() {
                     isSelected={selectedId === item.id}
                     onClick={() => {
                       setSelectedId(item.id)
+                    }}
+                    onDelete={() => {
+                      if (selectedId === item.id) setSelectedId(null)
+                      deleteAnalysisMutation.mutate(item.id)
                     }}
                   />
                 ))}

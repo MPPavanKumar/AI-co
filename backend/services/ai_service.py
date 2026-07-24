@@ -403,34 +403,37 @@ Return a polished, professional cover letter text ready to be sent."""
         return await self.generate_completion(prompt=prompt, temperature=0.5)
 
     async def generate_interview_questions(
-        self, role: str, skills: List[str], count: int = 5
+        self, role: str, company_name: str = "Target Company", skills: List[str] = None, count: int = 5
     ) -> Tuple[List[Dict[str, Any]], str]:
-        """Feature: Advanced 5-Question Interview Generation (1 HR, 1 Technical, 3 DSA)"""
-        system_prompt = "You are a principal technical interviewer at Google. Always respond strictly in valid JSON format."
-        prompt = f"""Generate EXACTLY 5 interview questions for a candidate applying for the role of '{role}'.
+        """Feature: Non-Repeating Company-Tailored Interview Generation (1 HR, 1 Technical, 3 DSA)"""
+        import random
+        target_company = company_name if company_name and company_name.strip() else "Target Tech Company"
+        skills = skills or ["Problem Solving", "Software Architecture", "Data Structures", "Algorithms"]
+
+        system_prompt = f"You are a Senior Principal Technical Hiring Bar Raiser at {target_company}. Always respond strictly in valid JSON format."
+        prompt = f"""Generate EXACTLY 5 FRESH, NON-REPEATING interview questions for '{target_company}' for a candidate applying for '{role}'.
 Target Skills: {', '.join(skills)}
 
-Structure requirements:
-- Question 1: HR / Behavioral question (question_type: "hr")
-- Question 2: Technical / Core Architecture Concept question (question_type: "technical")
-- Question 3: Beginner DSA / Algorithmic Coding problem (question_type: "dsa")
-- Question 4: Intermediate DSA / Data Structures Coding problem (question_type: "dsa")
-- Question 5: Intermediate/Advanced DSA / Algorithmic Coding problem (question_type: "dsa")
+CRITICAL VARIETY & NON-REPETITION RULES:
+1. DO NOT REPEAT generic or standard stock questions. Generate creative, realistic, and challenging questions.
+2. Question 1 (HR / Behavioral): Ask a unique scenario-based behavioral question testing a specific core competency (e.g., dealing with unclear requirements, post-mortem after a critical bug, pushing back on unreasonable deadlines, or mentoring team members).
+3. Question 2 (Technical / Architecture): Ask a deep-dive technical concept or system design question tailored to {target_company}'s scale.
+4. Questions 3, 4, 5 (DSA Coding): Pick 3 distinct DSA problems across DIFFERENT topic domains (e.g., Two Pointers, Dynamic Programming, Binary Trees, Sliding Window, or Graphs). Ensure starter code signatures, input constraints, and sample test cases are complete.
 
 Return a JSON object with a 'questions' array containing 5 objects with this structure:
 {{
   "questions": [
     {{
       "id": 1,
-      "question": "<question text>",
+      "question": "<unique behavioral or technical question for {target_company}>",
       "question_type": "hr",
       "category": "HR",
       "difficulty": "Easy",
       "starter_code_templates": {{
-        "python": "# Python implementation\ndef solution():\n    pass",
-        "javascript": "// JavaScript implementation\nfunction solution() {{\n    \n}}",
-        "java": "// Java implementation\nclass Solution {{\n    public void solve() {{\n        \n    }}\n}}",
-        "cpp": "// C++ implementation\n#include <iostream>\nusing namespace std;\n\nvoid solve() {{\n    \n}}"
+        "python": "# Python solution\ndef solution():\n    pass",
+        "javascript": "// JavaScript solution\nfunction solution() {{\n    \n}}",
+        "java": "// Java solution\nclass Solution {{\n    public void solve() {{\n        \n    }}\n}}",
+        "cpp": "// C++ solution\n#include <iostream>\nusing namespace std;\nvoid solve() {{\n    \n}}"
       }},
       "constraints": [],
       "sample_test_cases": [],
@@ -438,13 +441,12 @@ Return a JSON object with a 'questions' array containing 5 objects with this str
     }}
   ]
 }}
-For DSA questions (ids 3, 4, 5), ensure 'starter_code_templates' has starter function signatures for python, javascript, java, and cpp, 'constraints' has input limits (e.g. 1 <= N <= 10^5), and 'sample_test_cases' has sample inputs and expected outputs.
 """
         try:
             raw_response = await self.generate_completion(
                 prompt=prompt,
                 system_prompt=system_prompt,
-                temperature=0.4,
+                temperature=0.7,
                 response_format_json=True,
             )
             parsed = self._clean_and_parse_json(raw_response)
@@ -452,81 +454,149 @@ For DSA questions (ids 3, 4, 5), ensure 'starter_code_templates' has starter fun
             if len(questions) == 5:
                 return questions, raw_response
         except Exception as e:
-            logger.warning("AI generation fallback triggered for role '%s': %s", role, e)
+            logger.warning("AI generation fallback triggered for role '%s' at '%s': %s", role, target_company, e)
 
-        # Fallback 5 structured questions (1 HR, 1 Tech, 3 DSA)
+        # Dynamic Randomized Fallback Question Catalog (Guarantees non-repeating sessions even offline)
+        hr_pool = [
+            {
+                "question": f"Describe a situation at {target_company} where you had to make a critical technical tradeoff under extreme time pressure for a {role} project. What was the outcome?",
+                "expected_key_points": ["Tradeoff analysis", "Risk management", "Stakeholder communication", "Post-launch reflection"]
+            },
+            {
+                "question": f"Tell me about a time when a production release you worked on caused an outage or unexpected failure at {target_company}. How did you debug, communicate, and fix it?",
+                "expected_key_points": ["Blameless post-mortem", "Incident response speed", "Root cause identification", "Preventative measures"]
+            },
+            {
+                "question": f"How do you handle situation when product requirements change midway through a development cycle for {target_company}? Give a concrete past example.",
+                "expected_key_points": ["Agile adaptability", "Impact assessment", "Refactoring strategy", "Team alignment"]
+            },
+            {
+                "question": f"Describe a project at {target_company} where you had to persuade reluctant team members or senior engineers to adopt a new architecture or tool.",
+                "expected_key_points": ["Data-driven persuasion", "Prototyping proof-of-concept", "Active listening", "Consensus building"]
+            }
+        ]
+
+        tech_pool = [
+            {
+                "question": f"How would you design a distributed rate limiter for {target_company}'s API gateway handling millions of requests per second? Compare Token Bucket vs Leaky Bucket algorithms.",
+                "expected_key_points": ["Redis/Memcached atomic counters", "Sliding window algorithm", "Low latency sub-ms response", "Distributed concurrency"]
+            },
+            {
+                "question": f"Explain how you would architect an event-driven notification engine for {target_company} using Kafka/RabbitMQ that guarantees at-least-once delivery without duplicate processing.",
+                "expected_key_points": ["Idempotency keys", "Message queue partitions", "Dead letter queues (DLQ)", "Consumer offset management"]
+            },
+            {
+                "question": f"What database indexing and sharding strategies would you implement for {target_company}'s high-growth relational data to prevent slow queries as tables scale past 100M rows?",
+                "expected_key_points": ["B-Tree vs Hash index", "Composite indexing", "Horizontal sharding by key", "Read replicas & connection pooling"]
+            }
+        ]
+
+        dsa_pool = [
+            {
+                "question": f"[{target_company} DSA] Given a string `s` consisting of opening and closing brackets `'()', '{{}}', '[]'`, determine if the input string is valid.",
+                "difficulty": "Easy",
+                "python": "# Python 3\ndef solution(s: str) -> bool:\n    # Stack approach\n    pass",
+                "js": "// JavaScript\nfunction solution(s) {\n    return true;\n}",
+                "java": "// Java\nclass Solution {\n    public boolean solve(String s) {\n        return true;\n    }\n}",
+                "cpp": "// C++\n#include <string>\nusing namespace std;\nbool solve(string s) {\n    return true;\n}",
+                "constraints": ["1 <= s.length <= 10^4", "s consists of brackets only"],
+                "sample_test_cases": ["Input: s = '()[]{}' -> Output: true", "Input: s = '(]' -> Output: false"],
+                "expected_key_points": ["Stack data structure O(N)", "Matching bracket pairs", "O(N) Space complexity"]
+            },
+            {
+                "question": f"[{target_company} DSA] Given an array of integers `nums` and an integer `target`, return indices of the two numbers such that they add up to `target`.",
+                "difficulty": "Easy",
+                "python": "# Python 3\ndef solution(nums: list[int], target: int) -> list[int]:\n    # Hash map O(N)\n    pass",
+                "js": "// JavaScript\nfunction solution(nums, target) {\n    return [];\n}",
+                "java": "// Java\nclass Solution {\n    public int[] solve(int[] nums, int target) {\n        return new int[]{};\n    }\n}",
+                "cpp": "// C++\n#include <vector>\nusing namespace std;\nvector<int> solve(vector<int>& nums, int target) {\n    return {};\n}",
+                "constraints": ["2 <= nums.length <= 10^4", "-10^9 <= nums[i] <= 10^9"],
+                "sample_test_cases": ["Input: nums = [2,7,11,15], target = 9 -> Output: [0,1]", "Input: nums = [3,2,4], target = 6 -> Output: [1,2]"],
+                "expected_key_points": ["Hash Map lookup O(N)", "Single pass algorithm", "O(N) Space complexity"]
+            },
+            {
+                "question": f"[{target_company} DSA] Given a string `s`, find the length of the longest substring without repeating characters.",
+                "difficulty": "Medium",
+                "python": "# Python 3\ndef solution(s: str) -> int:\n    # Sliding window algorithm\n    return 0",
+                "js": "// JavaScript\nfunction solution(s) {\n    return 0;\n}",
+                "java": "// Java\nclass Solution {\n    public int solve(String s) {\n        return 0;\n    }\n}",
+                "cpp": "// C++\n#include <string>\nusing namespace std;\nint solve(string s) {\n    return 0;\n}",
+                "constraints": ["0 <= s.length <= 5 * 10^4"],
+                "sample_test_cases": ["Input: s = 'abcabcbb' -> Output: 3", "Input: s = 'bbbbb' -> Output: 1"],
+                "expected_key_points": ["Sliding window with Set/Map", "O(N) Time complexity", "Two-pointer window technique"]
+            },
+            {
+                "question": f"[{target_company} DSA] Given the `head` of a singly linked list, reverse the list and return its reversed head.",
+                "difficulty": "Medium",
+                "python": "# Python 3\ndef solution(head):\n    # Iterative reverse\n    pass",
+                "js": "// JavaScript\nfunction solution(head) {\n    return head;\n}",
+                "java": "// Java\nclass Solution {\n    public ListNode solve(ListNode head) {\n        return head;\n    }\n}",
+                "cpp": "// C++\nListNode* solve(ListNode* head) {\n    return head;\n}",
+                "constraints": ["0 <= Number of nodes <= 5000", "-5000 <= Node.val <= 5000"],
+                "sample_test_cases": ["Input: head = [1,2,3,4,5] -> Output: [5,4,3,2,1]", "Input: head = [1,2] -> Output: [2,1]"],
+                "expected_key_points": ["Iterative 3-pointer technique", "O(N) Time, O(1) Space", "Handling empty list"]
+            },
+            {
+                "question": f"[{target_company} DSA] Given an integer array `height` representing an elevation map, compute how much water it can trap after raining.",
+                "difficulty": "Hard",
+                "python": "# Python 3\ndef solution(height: list[int]) -> int:\n    # Two pointers O(N)\n    return 0",
+                "js": "// JavaScript\nfunction solution(height) {\n    return 0;\n}",
+                "java": "// Java\nclass Solution {\n    public int solve(int[] height) {\n        return 0;\n    }\n}",
+                "cpp": "// C++\n#include <vector>\nusing namespace std;\nint solve(vector<int>& height) {\n    return 0;\n}",
+                "constraints": ["1 <= height.length <= 2 * 10^4", "0 <= height[i] <= 10^5"],
+                "sample_test_cases": ["Input: height = [0,1,0,2,1,0,1,3,2,1,2,1] -> Output: 6", "Input: height = [4,2,0,3,2,5] -> Output: 9"],
+                "expected_key_points": ["Two pointers algorithm O(N) Time O(1) Space", "Monotonic stack approach", "Tracking left_max and right_max"]
+            }
+        ]
+
+        # Select random non-repeating items from pools
+        selected_hr = random.choice(hr_pool)
+        selected_tech = random.choice(tech_pool)
+        selected_dsa = random.sample(dsa_pool, min(3, len(dsa_pool)))
+
         fallback_questions = [
             {
                 "id": 1,
-                "question": f"Describe a situation where you had a technical disagreement with a colleague while developing for a {role} role. How did you resolve it?",
+                "question": selected_hr["question"],
                 "question_type": "hr",
                 "category": "HR",
                 "difficulty": "Easy",
                 "starter_code_templates": {},
                 "constraints": [],
                 "sample_test_cases": [],
-                "expected_key_points": ["Professional communication", "Focus on technical merits", "Consensus building", "Ownership of results"]
+                "expected_key_points": selected_hr["expected_key_points"]
             },
             {
                 "id": 2,
-                "question": f"Explain the architectural principles of designing microservices vs monolithic applications for {role} systems. How do you handle database scaling and state management?",
+                "question": selected_tech["question"],
                 "question_type": "technical",
                 "category": "Technical",
                 "difficulty": "Medium",
                 "starter_code_templates": {},
                 "constraints": [],
                 "sample_test_cases": [],
-                "expected_key_points": ["Decoupled microservices", "Database per service / Read replicas", "Stateless API design", "Caching & message queues"]
-            },
-            {
-                "id": 3,
-                "question": "Given an array of integers `nums` and an integer `target`, return indices of the two numbers such that they add up to `target`.",
-                "question_type": "dsa",
-                "category": "DSA",
-                "difficulty": "Easy",
-                "starter_code_templates": {
-                    "python": "# Python 3\ndef solution(nums: list[int], target: int) -> list[int]:\n    # Write O(N) hash map logic\n    pass",
-                    "javascript": "// JavaScript\nfunction solution(nums, target) {\n    // Write O(N) Map logic\n    return [];\n}",
-                    "java": "// Java\nclass Solution {\n    public int[] solve(int[] nums, int target) {\n        return new int[]{};\n    }\n}",
-                    "cpp": "// C++\n#include <vector>\nusing namespace std;\nvector<int> solve(vector<int>& nums, int target) {\n    return {};\n}"
-                },
-                "constraints": ["2 <= nums.length <= 10^4", "-10^9 <= nums[i] <= 10^9", "-10^9 <= target <= 10^9"],
-                "sample_test_cases": ["Input: nums = [2,7,11,15], target = 9 -> Output: [0,1]", "Input: nums = [3,2,4], target = 6 -> Output: [1,2]"],
-                "expected_key_points": ["Hash Map lookup O(N)", "Single pass algorithm", "Handling duplicate values"]
-            },
-            {
-                "id": 4,
-                "question": "Given the `head` of a singly linked list, reverse the list and return its reversed head.",
-                "question_type": "dsa",
-                "category": "DSA",
-                "difficulty": "Medium",
-                "starter_code_templates": {
-                    "python": "# Python 3\ndef solution(head):\n    # Iterative or Recursive Reverse\n    pass",
-                    "javascript": "// JavaScript\nfunction solution(head) {\n    return head;\n}",
-                    "java": "// Java\nclass Solution {\n    public ListNode solve(ListNode head) {\n        return head;\n    }\n}",
-                    "cpp": "// C++\nListNode* solve(ListNode* head) {\n    return head;\n}"
-                },
-                "constraints": ["The number of nodes in the list is in the range [0, 5000]", "-5000 <= Node.val <= 5000"],
-                "sample_test_cases": ["Input: head = [1,2,3,4,5] -> Output: [5,4,3,2,1]", "Input: head = [1,2] -> Output: [2,1]"],
-                "expected_key_points": ["Iterative 3-pointer technique", "O(N) Time, O(1) Space", "Edge case null/single node"]
-            },
-            {
-                "id": 5,
-                "question": "Given an integer array `height` representing an elevation map where width of each bar is 1, compute how much water it can trap after raining.",
-                "question_type": "dsa",
-                "category": "DSA",
-                "difficulty": "Hard",
-                "starter_code_templates": {
-                    "python": "# Python 3\ndef solution(height: list[int]) -> int:\n    # Two-pointer or Stack approach\n    return 0",
-                    "javascript": "// JavaScript\nfunction solution(height) {\n    return 0;\n}",
-                    "java": "// Java\nclass Solution {\n    public int solve(int[] height) {\n        return 0;\n    }\n}",
-                    "cpp": "// C++\n#include <vector>\nusing namespace std;\nint solve(vector<int>& height) {\n    return 0;\n}"
-                },
-                "constraints": ["n == height.length", "1 <= n <= 2 * 10^4", "0 <= height[i] <= 10^5"],
-                "sample_test_cases": ["Input: height = [0,1,0,2,1,0,1,3,2,1,2,1] -> Output: 6", "Input: height = [4,2,0,3,2,5] -> Output: 9"],
-                "expected_key_points": ["Two pointers algorithm O(N) Time O(1) Space", "Monotonic stack approach", "Tracking left_max and right_max"]
+                "expected_key_points": selected_tech["expected_key_points"]
             }
         ]
+
+        for i, item in enumerate(selected_dsa, start=3):
+            fallback_questions.append({
+                "id": i,
+                "question": item["question"],
+                "question_type": "dsa",
+                "category": "DSA",
+                "difficulty": item["difficulty"],
+                "starter_code_templates": {
+                    "python": item["python"],
+                    "javascript": item["js"],
+                    "java": item["java"],
+                    "cpp": item["cpp"],
+                },
+                "constraints": item["constraints"],
+                "sample_test_cases": item["sample_test_cases"],
+                "expected_key_points": item["expected_key_points"]
+            })
+
         return fallback_questions, "FALLBACK_RATE_LIMIT"
 
     async def evaluate_single_interview_question(

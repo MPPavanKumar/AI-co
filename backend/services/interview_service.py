@@ -59,6 +59,7 @@ class InterviewService:
         try:
             questions_data, _ = await ai_service.generate_interview_questions(
                 role=role,
+                company_name=company_name,
                 skills=skills_context[:10],
                 count=count,
             )
@@ -75,6 +76,14 @@ class InterviewService:
             if not q_type:
                 q_type = "hr" if idx == 1 else ("technical" if idx == 2 else "dsa")
 
+            sample_cases_raw = q.get("sample_test_cases", [])
+            normalized_cases = []
+            for tc in sample_cases_raw:
+                if isinstance(tc, dict):
+                    normalized_cases.append(f"Input: {tc.get('input', '')} -> Output: {tc.get('expected_output', tc.get('output', ''))}")
+                else:
+                    normalized_cases.append(str(tc))
+
             normalized_questions.append({
                 "id": q.get("id", idx),
                 "question": q.get("question", f"Question {idx}"),
@@ -82,9 +91,9 @@ class InterviewService:
                 "category": q.get("category", q_type.upper()),
                 "difficulty": q.get("difficulty", "Medium"),
                 "starter_code_templates": q.get("starter_code_templates", {}),
-                "constraints": q.get("constraints", []),
-                "sample_test_cases": q.get("sample_test_cases", []),
-                "expected_key_points": q.get("expected_key_points", []),
+                "constraints": [str(c) for c in q.get("constraints", [])],
+                "sample_test_cases": normalized_cases,
+                "expected_key_points": [str(kp) for kp in q.get("expected_key_points", [])],
             })
 
         session = InterviewSession(
@@ -217,7 +226,7 @@ class InterviewService:
 
         session.status = "completed"
         db.add(session)
-        await db.flush()
+        await db.commit()
         await db.refresh(session)
         return session
 
@@ -256,5 +265,5 @@ class InterviewService:
         """Delete an interview session by ID."""
         session = await InterviewService.get_session_by_id(db, session_id, user_id)
         await db.delete(session)
-        await db.flush()
+        await db.commit()
         return True

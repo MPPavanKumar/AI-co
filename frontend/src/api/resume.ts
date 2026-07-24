@@ -37,5 +37,10 @@ export const resumeApi = {
     const response = await apiClient.get<ResumeAnalysis>(`/resume/analyses/${id}`, { headers: jsonHeaders })
     return response.data
   },
+
+  deleteAnalysis: async (id: string): Promise<{ message: string }> => {
+    const response = await apiClient.delete<{ message: string }>(`/resume/analyses/${id}`, { headers: jsonHeaders })
+    return response.data
+  },
 }
 

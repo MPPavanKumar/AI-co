@@ -85,3 +85,18 @@ async def get_analysis(
     """Return a specific analysis. 404 if not found or not owned by user."""
     analysis = await ResumeService.get_analysis_by_id(db, analysis_id, current_user.id)
     return ResumeAnalysisResponse.model_validate(analysis)
+
+
+@router.delete(
+    "/analyses/{analysis_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete a resume analysis by ID",
+)
+async def delete_analysis(
+    analysis_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Delete a resume analysis by ID."""
+    await ResumeService.delete_analysis(db, analysis_id, current_user.id)
+    return {"message": "Resume analysis deleted successfully."}

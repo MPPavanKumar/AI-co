@@ -38,3 +38,18 @@ export function useResumeById(id: string | null) {
     enabled: !!id,
   })
 }
+
+export function useDeleteResumeAnalysis() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => resumeApi.deleteAnalysis(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resume-analyses'] })
+      queryClient.invalidateQueries({ queryKey: ['resume-latest'] })
+      toast.success('Resume analysis deleted successfully!')
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error))
+    },
+  })
+}
