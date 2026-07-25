@@ -5,6 +5,9 @@ import {
   FileText,
   Building2,
   Brain,
+  Compass,
+  Bot,
+  BarChart2,
   User,
   LogOut,
   Menu,
@@ -22,6 +25,9 @@ const navItems = [
   { to: '/resume', icon: FileText, label: 'Resume Analyzer' },
   { to: '/company-match', icon: Building2, label: 'Company Match' },
   { to: '/interview', icon: Brain, label: 'Mock Interview' },
+  { to: '/roadmap', icon: Compass, label: 'Learning Roadmap' },
+  { to: '/chat', icon: Bot, label: 'AI Career Copilot' },
+  { to: '/analytics', icon: BarChart2, label: 'Analytics' },
   { to: '/profile', icon: User, label: 'Profile' },
 ]
 

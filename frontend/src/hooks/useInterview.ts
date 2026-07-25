@@ -1,8 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { interviewApi } from '../api/interview'
-import type { InterviewGenerateRequest, SingleQuestionEvaluateRequest } from '../types/interview'
+import type {
+  InterviewGenerateRequest,
+  SingleQuestionEvaluateRequest,
+  InterviewAnswerFeedbackRequest,
+} from '../types/interview'
 import { getApiErrorMessage } from '../lib/apiError'
+
+export function useEvaluateAnswerFeedback() {
+  return useMutation({
+    mutationFn: (data: InterviewAnswerFeedbackRequest) => interviewApi.evaluateAnswerFeedback(data),
+    onSuccess: () => {
+      toast.success('AI Feedback generated successfully!')
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error))
+    },
+  })
+}
 
 export function useInterviewSessions() {
   return useQuery({

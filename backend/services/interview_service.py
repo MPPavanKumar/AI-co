@@ -163,6 +163,14 @@ class InterviewService:
             "selected_language": selected_language,
             "status": status,
             "score": score,
+            "technical_accuracy": eval_data.get("technical_accuracy", score),
+            "technical_accuracy_explanation": eval_data.get("technical_accuracy_explanation", eval_data.get("correctness", "")),
+            "communication_skills": eval_data.get("communication_skills", score),
+            "communication_explanation": eval_data.get("communication_explanation", ""),
+            "confidence": eval_data.get("confidence", score),
+            "confidence_explanation": eval_data.get("confidence_explanation", ""),
+            "hiring_recommendation": eval_data.get("hiring_recommendation", "Hire"),
+            "recommendation_reason": eval_data.get("recommendation_reason", ""),
             "correctness": eval_data.get("correctness", "Good"),
             "time_complexity": eval_data.get("time_complexity", "N/A"),
             "space_complexity": eval_data.get("space_complexity", "N/A"),
@@ -172,6 +180,8 @@ class InterviewService:
             "weaknesses": eval_data.get("weaknesses", []),
             "optimal_solution": eval_data.get("optimal_solution", ""),
             "improvement_suggestions": eval_data.get("improvement_suggestions", []),
+            "suggestions_for_improvement": eval_data.get("suggestions_for_improvement", eval_data.get("improvement_suggestions", [])),
+            "better_sample_answer": eval_data.get("better_sample_answer", eval_data.get("optimal_solution", "")),
         }
 
         # Update or append in session.answers_and_feedback array
@@ -193,6 +203,25 @@ class InterviewService:
         return session
 
     @staticmethod
+    async def evaluate_answer_feedback(
+        question: str,
+        question_type: str = "technical",
+        user_answer: str | None = None,
+        user_code: str | None = None,
+        selected_language: str | None = "python",
+    ) -> dict:
+        """Standalone AI Interview Feedback evaluation."""
+        ai_service = get_ai_service()
+        eval_data, _ = await ai_service.evaluate_answer_feedback(
+            question=question,
+            question_type=question_type,
+            user_answer=user_answer,
+            user_code=user_code,
+            selected_language=selected_language,
+        )
+        return eval_data
+
+    @staticmethod
     async def complete_session(
         db: AsyncSession,
         session_id: uuid.UUID,
@@ -202,27 +231,78 @@ class InterviewService:
         session = await InterviewService.get_session_by_id(db, session_id, user_id)
         ai_service = get_ai_service()
 
+        feedback_list = session.answers_and_feedback or []
+        questions_map = {q.get("id"): str(q.get("question_type", "")).lower() for q in (session.questions or [])}
+
+        hr_scores = []
+        tech_scores = []
+        dsa_scores = []
+        all_scores = []
+
+        for item in feedback_list:
+            if not isinstance(item, dict):
+                continue
+            sc = item.get("score")
+            if sc is None:
+                continue
+            try:
+                sc = int(sc)
+            except (ValueError, TypeError):
+                continue
+
+            all_scores.append(sc)
+            q_id = item.get("question_id")
+            q_type = str(item.get("question_type", "")).lower()
+            if not q_type and q_id in questions_map:
+                q_type = questions_map[q_id]
+
+            if q_type in ["dsa", "coding", "algorithm"]:
+                dsa_scores.append(sc)
+            elif q_type in ["hr", "behavioral"]:
+                hr_scores.append(sc)
+            elif q_type in ["technical", "architecture", "system_design"]:
+                tech_scores.append(sc)
+            else:
+                if q_id == 1:
+                    hr_scores.append(sc)
+                elif q_id == 2:
+                    tech_scores.append(sc)
+                else:
+                    dsa_scores.append(sc)
+
+        emp_overall = round(sum(all_scores) / len(all_scores)) if all_scores else None
+        emp_hr = round(sum(hr_scores) / len(hr_scores)) if hr_scores else None
+        emp_tech = round(sum(tech_scores) / len(tech_scores)) if tech_scores else None
+        emp_dsa = round(sum(dsa_scores) / len(dsa_scores)) if dsa_scores else None
+
         try:
             report_data, _ = await ai_service.generate_final_interview_report(
                 role=session.role,
-                answers_and_feedback=session.answers_and_feedback or [],
+                answers_and_feedback=feedback_list,
             )
-            session.overall_score = max(0, min(100, int(report_data.get("overall_score", 75))))
-            session.hr_score = max(0, min(100, int(report_data.get("hr_score", 75))))
-            session.technical_score = max(0, min(100, int(report_data.get("technical_score", 75))))
-            session.dsa_score = max(0, min(100, int(report_data.get("dsa_score", 75))))
             session.strengths = report_data.get("strengths", [])
             session.weaknesses = report_data.get("weaknesses", [])
             session.recommended_topics = report_data.get("recommended_topics", [])
+
+            ai_overall = report_data.get("overall_score")
+            ai_hr = report_data.get("hr_score")
+            ai_tech = report_data.get("technical_score")
+            ai_dsa = report_data.get("dsa_score")
+
+            session.overall_score = emp_overall if emp_overall is not None else (int(ai_overall) if ai_overall is not None else 75)
+            session.hr_score = emp_hr if emp_hr is not None else (int(ai_hr) if ai_hr is not None else session.overall_score)
+            session.technical_score = emp_tech if emp_tech is not None else (int(ai_tech) if ai_tech is not None else session.overall_score)
+            session.dsa_score = emp_dsa if emp_dsa is not None else (int(ai_dsa) if ai_dsa is not None else session.overall_score)
+
         except Exception as e:
             logger.error("Failed to generate final interview report: %s", e)
-            session.overall_score = 75
-            session.hr_score = 75
-            session.technical_score = 75
-            session.dsa_score = 75
-            session.strengths = ["Completed session"]
-            session.weaknesses = ["Review technical concepts"]
-            session.recommended_topics = ["Data Structures", "Algorithms", "System Design"]
+            session.overall_score = emp_overall if emp_overall is not None else 75
+            session.hr_score = emp_hr if emp_hr is not None else session.overall_score
+            session.technical_score = emp_tech if emp_tech is not None else session.overall_score
+            session.dsa_score = emp_dsa if emp_dsa is not None else session.overall_score
+            session.strengths = ["Completed mock interview session"]
+            session.weaknesses = ["Review edge cases and Big-O efficiency"]
+            session.recommended_topics = ["Data Structures & Algorithms", "System Architecture"]
 
         session.status = "completed"
         db.add(session)

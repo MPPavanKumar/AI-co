@@ -8,6 +8,9 @@ import ProfilePage from './pages/ProfilePage'
 import ResumePage from './pages/ResumePage'
 import JobMatchPage from './pages/JobMatchPage'
 import InterviewPage from './pages/InterviewPage'
+import RoadmapPage from './pages/RoadmapPage'
+import ChatbotPage from './pages/ChatbotPage'
+import AnalyticsPage from './pages/AnalyticsPage'
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuthStore()
@@ -31,6 +34,9 @@ export default function App() {
         <Route path="resume" element={<ResumePage />} />
         <Route path="company-match" element={<JobMatchPage />} />
         <Route path="interview" element={<InterviewPage />} />
+        <Route path="roadmap" element={<RoadmapPage />} />
+        <Route path="chat" element={<ChatbotPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
 

@@ -11,19 +11,30 @@ from fastapi.responses import RedirectResponse
 
 from core.config import settings
 from core.database import engine, Base
-from routers import auth, resume, job, interview, dashboard
+from routers import auth, resume, job, interview, dashboard, roadmap
 
 
 import openai
 from services.ai_service import get_ai_service
 
 
+from sqlalchemy import text
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Create DB tables on startup, validate OpenRouter setup, cleanup on shutdown."""
-    # ── Database ──────────────────────────────────────────────────────────────
+    # ── Database & Dynamic Migration ──────────────────────────────────────────
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        res = await conn.execute(text("PRAGMA table_info(resume_analyses)"))
+        existing_cols = {row[1] for row in res.fetchall()}
+
+        if "display_name" not in existing_cols:
+            await conn.execute(text("ALTER TABLE resume_analyses ADD COLUMN display_name VARCHAR(255)"))
+        if "is_active" not in existing_cols:
+            await conn.execute(text("ALTER TABLE resume_analyses ADD COLUMN is_active BOOLEAN DEFAULT 0 NOT NULL"))
+        if "updated_at" not in existing_cols:
+            await conn.execute(text("ALTER TABLE resume_analyses ADD COLUMN updated_at DATETIME"))
 
     # ── OpenRouter startup validation ─────────────────────────────────────────
     key = settings.OPENROUTER_API_KEY.strip().strip('"').strip("'") if settings.OPENROUTER_API_KEY else ""
@@ -84,11 +95,19 @@ All protected endpoints require a Bearer token.
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+    ],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from routers import auth, resume, job, interview, dashboard, roadmap, chat, analytics
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 
@@ -97,6 +116,9 @@ app.include_router(resume.router, prefix="/api/v1")
 app.include_router(job.router, prefix="/api/v1")
 app.include_router(interview.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
+app.include_router(roadmap.router, prefix="/api/v1")
+app.include_router(chat.router, prefix="/api/v1")
+app.include_router(analytics.router, prefix="/api/v1")
 
 
 # ── Health Check ──────────────────────────────────────────────────────────────

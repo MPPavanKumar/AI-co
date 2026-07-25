@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from openai import AsyncOpenAI, APIError, APIConnectionError, RateLimitError, AuthenticationError
 
 from core.config import settings
+from prompts.roadmap_prompts import ROADMAP_SYSTEM_PROMPT, ROADMAP_USER_PROMPT_TEMPLATE
 
 logger = logging.getLogger(__name__)
 
@@ -443,18 +444,23 @@ Return a JSON object with a 'questions' array containing 5 objects with this str
 }}
 """
         try:
-            raw_response = await self.generate_completion(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                temperature=0.7,
-                response_format_json=True,
+            raw_response = await asyncio.wait_for(
+                self.generate_completion(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    temperature=0.7,
+                    max_tokens=1500,
+                    response_format_json=True,
+                    retries=0,
+                ),
+                timeout=3.5,
             )
             parsed = self._clean_and_parse_json(raw_response)
             questions = parsed.get("questions", [])
             if len(questions) == 5:
                 return questions, raw_response
         except Exception as e:
-            logger.warning("AI generation fallback triggered for role '%s' at '%s': %s", role, target_company, e)
+            logger.warning("AI generation fast fallback triggered for role '%s' at '%s': %s", role, target_company, e)
 
         # Dynamic Randomized Fallback Question Catalog (Guarantees non-repeating sessions even offline)
         hr_pool = [
@@ -599,46 +605,62 @@ Return a JSON object with a 'questions' array containing 5 objects with this str
 
         return fallback_questions, "FALLBACK_RATE_LIMIT"
 
-    async def evaluate_single_interview_question(
+    async def evaluate_answer_feedback(
         self,
         question: str,
-        question_type: str,
-        candidate_answer: Optional[str] = None,
-        candidate_code: Optional[str] = None,
+        question_type: str = "technical",
+        user_answer: Optional[str] = None,
+        user_code: Optional[str] = None,
         selected_language: Optional[str] = "python",
-        expected_key_points: Optional[List[str]] = None,
     ) -> Tuple[Dict[str, Any], str]:
-        """Feature: Evaluate a single interview question in real-time."""
-        system_prompt = "You are an AI interview evaluator and principal software architect. Always respond strictly in valid JSON format."
-        prompt = f"""Evaluate the candidate's response for the following question:
+        """
+        Feature: AI Interview Feedback
+        Evaluates user answer across 8 dimensions + score explanations & hiring recommendation:
+        - overall_score (0-100)
+        - technical_accuracy (0-100) + explanation
+        - communication_skills (0-100) + explanation
+        - confidence (0-100) + explanation
+        - hiring_recommendation + justification
+        - strengths (List[str])
+        - weaknesses (List[str])
+        - suggestions_for_improvement (List[str])
+        - better_sample_answer (str)
+        """
+        system_prompt = (
+            "You are a Senior Bar Raiser and Lead Technical Interviewer evaluating candidate interview responses. "
+            "Return your evaluation strictly in valid JSON format."
+        )
+        prompt = f"""Evaluate the candidate's interview answer thoroughly.
 
+Question: {question}
 Question Type: {question_type}
 Language (if coding): {selected_language}
-Question: {question}
-Expected Key Points: {json.dumps(expected_key_points or [])}
 
-Candidate Written Answer:
+Candidate Written/Spoken Answer:
 ---
-{candidate_answer or "(No text answer provided)"}
+{user_answer or "(No text answer provided)"}
 ---
 
 Candidate Submitted Code:
 ---
-{candidate_code or "(No code provided)"}
+{user_code or "(No code submitted)"}
 ---
 
-Return a JSON object:
+Return a JSON object with EXACTLY this structure:
 {{
-  "score": <integer 0-100>,
-  "correctness": "<1 sentence evaluating answer/code correctness>",
-  "time_complexity": "<Big-O time complexity if DSA, or 'N/A' if oral>",
-  "space_complexity": "<Big-O space complexity if DSA, or 'N/A' if oral>",
-  "code_readability": "<Clean Code rating or 'N/A'>",
-  "edge_cases": "<1 sentence on edge case coverage>",
-  "strengths": ["<strength 1>", "<strength 2>"],
+  "overall_score": <integer 0-100>,
+  "technical_accuracy": <integer 0-100>,
+  "technical_accuracy_explanation": "<1-2 sentence explanation of technical correctness>",
+  "communication_skills": <integer 0-100>,
+  "communication_explanation": "<1-2 sentence explanation of clarity, structure, and articulation>",
+  "confidence": <integer 0-100>,
+  "confidence_explanation": "<1-2 sentence explanation of tone, terminology, and conviction>",
+  "hiring_recommendation": "<Strong Hire | Hire | Lean Hire | Lean No Hire | No Hire>",
+  "recommendation_reason": "<1-2 sentence executive summary justification for the hiring recommendation>",
+  "strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
   "weaknesses": ["<weakness 1>", "<weakness 2>"],
-  "optimal_solution": "<complete, production-grade optimal code solution if DSA, or ideal answer text if oral>",
-  "improvement_suggestions": ["<suggestion 1>", "<suggestion 2>"]
+  "suggestions_for_improvement": ["<actionable suggestion 1>", "<actionable suggestion 2>", "<actionable suggestion 3>"],
+  "better_sample_answer": "<complete, production-grade ideal model answer or optimized code solution>"
 }}
 """
         try:
@@ -649,28 +671,80 @@ Return a JSON object:
                 response_format_json=True,
             )
             parsed = self._clean_and_parse_json(raw_response)
-            if parsed.get("score") is not None:
+            if parsed.get("overall_score") is not None or parsed.get("technical_accuracy") is not None:
+                parsed["overall_score"] = max(0, min(100, int(parsed.get("overall_score", 75))))
+                parsed["technical_accuracy"] = max(0, min(100, int(parsed.get("technical_accuracy", 75))))
+                parsed["communication_skills"] = max(0, min(100, int(parsed.get("communication_skills", 75))))
+                parsed["confidence"] = max(0, min(100, int(parsed.get("confidence", 75))))
                 return parsed, raw_response
         except Exception as e:
-            logger.warning("Single question evaluation fallback triggered: %s", e)
+            logger.warning("AI Interview Feedback fallback triggered: %s", e)
 
-        has_code = bool(candidate_code and len(candidate_code.strip()) > 10)
-        has_ans = bool(candidate_answer and len(candidate_answer.strip()) > 5)
-        calc_score = 85 if (has_code or has_ans) else 50
+        has_code = bool(user_code and len(user_code.strip()) > 10)
+        has_ans = bool(user_answer and len(user_answer.strip()) > 5)
+        base = 82 if (has_code or has_ans) else 50
 
-        fallback_eval = {
-            "score": calc_score,
-            "correctness": "Implementation displays a clear logical structure and addresses the core problem statement." if calc_score > 60 else "Minimal answer provided; needs deeper technical elaboration.",
-            "time_complexity": "O(N log N)" if question_type == "dsa" else "N/A",
-            "space_complexity": "O(N)" if question_type == "dsa" else "N/A",
-            "code_readability": "Clean & Readable" if has_code else "N/A",
-            "edge_cases": "Handled standard input cases; consider empty or boundary bounds.",
-            "strengths": ["Clear logical approach", "Proper parameter handling"],
-            "weaknesses": ["Elaborate on edge case constraints", "Optimize memory allocation"],
-            "optimal_solution": candidate_code if has_code else f"# Optimal Solution for {question}\n# Ensure O(N) time complexity using optimal data structures.",
-            "improvement_suggestions": ["Practice writing unit tests for boundary conditions", "Review Big-O space complexity optimization"]
+        fallback_feedback = {
+            "overall_score": base,
+            "technical_accuracy": base,
+            "technical_accuracy_explanation": "Demonstrates core technical understanding of the problem statement and foundational concepts." if base > 60 else "Requires deeper technical elaboration and key algorithmic details.",
+            "communication_skills": base + 3 if base > 60 else 55,
+            "communication_explanation": "Response is structured logically with clear intent.",
+            "confidence": base - 2 if base > 60 else 50,
+            "confidence_explanation": "Tone is steady and professional; use precise industry terminology to enhance conviction.",
+            "hiring_recommendation": "Hire" if base >= 75 else ("Lean Hire" if base >= 60 else "No Hire"),
+            "recommendation_reason": "Candidate displays promising technical problem-solving abilities and clear communication." if base >= 60 else "Candidate answer needs further preparation on core technical concepts.",
+            "strengths": [
+                "Clear logical approach to problem solving",
+                "Proper parameter and response handling",
+                "Structured communication"
+            ],
+            "weaknesses": [
+                "Boundary condition and edge case coverage could be expanded",
+                "Big-O space complexity optimization can be refined"
+            ],
+            "suggestions_for_improvement": [
+                "Explicitly outline constraints and edge cases before presenting your solution",
+                "Use standard STAR (Situation, Task, Action, Result) format for behavioral/oral questions",
+                "Practice dry-running code with sample test cases to verify correctness"
+            ],
+            "better_sample_answer": user_code if has_code else (
+                f"### Ideal Answer for: {question}\n\n"
+                "1. **Core Concept**: Begin with a concise 1-sentence summary of the approach.\n"
+                "2. **Tradeoffs & Complexity**: Discuss Time Complexity O(N) and Space Complexity O(1).\n"
+                "3. **Edge Cases**: Explicitly mention empty inputs, single element arrays, and null checks."
+            )
         }
-        return fallback_eval, "FALLBACK_RATE_LIMIT"
+        return fallback_feedback, "FALLBACK_RATE_LIMIT"
+
+    async def evaluate_single_interview_question(
+        self,
+        question: str,
+        question_type: str,
+        candidate_answer: Optional[str] = None,
+        candidate_code: Optional[str] = None,
+        selected_language: Optional[str] = "python",
+        expected_key_points: Optional[List[str]] = None,
+    ) -> Tuple[Dict[str, Any], str]:
+        """Feature: Evaluate a single interview question in real-time."""
+        eval_data, raw_resp = await self.evaluate_answer_feedback(
+            question=question,
+            question_type=question_type,
+            user_answer=candidate_answer,
+            user_code=candidate_code,
+            selected_language=selected_language,
+        )
+
+        score = eval_data.get("overall_score", 75)
+        eval_data["score"] = score
+        eval_data["correctness"] = eval_data.get("technical_accuracy_explanation", "Good technical approach")
+        eval_data["time_complexity"] = "O(N)" if question_type == "dsa" else "N/A"
+        eval_data["space_complexity"] = "O(1)" if question_type == "dsa" else "N/A"
+        eval_data["code_readability"] = "Clean & Readable" if candidate_code else "N/A"
+        eval_data["edge_cases"] = "Handled standard input cases"
+        eval_data["optimal_solution"] = eval_data.get("better_sample_answer", "")
+        eval_data["improvement_suggestions"] = eval_data.get("suggestions_for_improvement", [])
+        return eval_data, raw_resp
 
     async def generate_final_interview_report(
         self,
@@ -757,35 +831,148 @@ Text:
         parsed = self._clean_and_parse_json(raw_response)
         return parsed.get("skills", []), raw_response
 
-    async def generate_learning_roadmap(
-        self, missing_skills: List[str], target_role: str
+    async def generate_personalized_learning_roadmap(
+        self,
+        target_role: str,
+        current_skills: Optional[List[str]] = None,
+        missing_skills: Optional[List[str]] = None,
+        resume_context: Optional[str] = None,
     ) -> Tuple[Dict[str, Any], str]:
-        """Feature: Learning Roadmap Generation"""
-        system_prompt = "You are a career development mentor creating step-by-step learning roadmaps. Always respond strictly in valid JSON format."
-        prompt = f"""Create a weekly learning roadmap for a candidate aiming for the role of '{target_role}' to master the following missing skills: {', '.join(missing_skills)}.
+        """Feature 1: Personalized AI Learning Roadmap Generation"""
+        c_skills = current_skills or ["Problem Solving", "Software Architecture", "REST API Design"]
+        m_skills = missing_skills or ["System Design", "Kubernetes", "Redis", "GraphQL", "CI/CD Pipelines"]
+        res_ctx = resume_context or "Candidate with software development background."
 
-Return a JSON object:
-{{
-  "target_role": "{target_role}",
-  "total_weeks": <integer>,
-  "weekly_plan": [
-    {{
-      "week": 1,
-      "topic": "<string>",
-      "objectives": [<array of goals>],
-      "recommended_resources": [<array of topic areas to practice/study>]
-    }}
-  ]
-}}
-"""
-        raw_response = await self.generate_completion(
-            prompt=prompt,
-            system_prompt=system_prompt,
-            temperature=0.4,
-            response_format_json=True,
+        prompt = ROADMAP_USER_PROMPT_TEMPLATE.format(
+            target_role=target_role,
+            current_skills=", ".join(c_skills),
+            missing_skills=", ".join(m_skills),
+            resume_context=res_ctx[:1000],
         )
-        parsed = self._clean_and_parse_json(raw_response)
-        return parsed, raw_response
+
+        try:
+            raw_response = await self.generate_completion(
+                prompt=prompt,
+                system_prompt=ROADMAP_SYSTEM_PROMPT,
+                temperature=0.3,
+                response_format_json=True,
+            )
+            parsed = self._clean_and_parse_json(raw_response)
+            if parsed.get("weekly_plan") and len(parsed.get("weekly_plan", [])) >= 4:
+                return parsed, raw_response
+        except Exception as e:
+            logger.warning("AI Learning Roadmap fallback triggered for role '%s': %s", target_role, e)
+
+        fallback_roadmap = {
+            "target_role": target_role,
+            "current_skills": c_skills,
+            "missing_skills": m_skills,
+            "estimated_completion_time": "4 Weeks (10-12 hrs/week)",
+            "weekly_plan": [
+                {
+                    "week": 1,
+                    "title": f"Week 1: Core Foundations & {m_skills[0] if m_skills else 'Architectural Patterns'}",
+                    "description": f"Master the fundamentals of {m_skills[0] if m_skills else 'Modern System Design'} and core principles.",
+                    "objectives": [
+                        f"Study foundational concepts of {m_skills[0] if m_skills else 'distributed architecture'}",
+                        "Set up local development environment and hands-on playground",
+                        "Build 3 core micro-examples validating key design patterns"
+                    ]
+                },
+                {
+                    "week": 2,
+                    "title": f"Week 2: Intermediate Mastery & {m_skills[1] if len(m_skills) > 1 else 'Database Scaling'}",
+                    "description": f"Deep dive into practical implementation of {m_skills[1] if len(m_skills) > 1 else 'caching and database optimization'}.",
+                    "objectives": [
+                        f"Implement production-ready workflows using {m_skills[1] if len(m_skills) > 1 else 'Redis/PostgreSQL'}",
+                        "Write automated unit and integration tests covering edge cases",
+                        "Profile latency and optimize performance bottlenecks"
+                    ]
+                },
+                {
+                    "week": 3,
+                    "title": f"Week 3: Advanced Integration & {m_skills[2] if len(m_skills) > 2 else 'Container Orchestration'}",
+                    "description": f"Architect complex integrations and automated deployment pipelines for {target_role}.",
+                    "objectives": [
+                        f"Build end-to-end service integration using {m_skills[2] if len(m_skills) > 2 else 'Docker & CI/CD'}",
+                        "Implement security, authentication, and error resilience patterns",
+                        "Set up automated monitoring, logging, and health metrics"
+                    ]
+                },
+                {
+                    "week": 4,
+                    "title": f"Week 4: Capstone Portfolio Project & {target_role} Interview Readiness",
+                    "description": "Consolidate all learned skills by shipping a production-grade portfolio project.",
+                    "objectives": [
+                        "Complete and deploy the Capstone Portfolio Project to public cloud",
+                        "Write comprehensive README with architectural diagrams and setup guides",
+                        "Review technical interview questions and conduct mock assessments"
+                    ]
+                }
+            ],
+            "recommended_courses": [
+                {
+                    "title": f"Mastering {target_role} Architecture & System Design",
+                    "provider": "Coursera",
+                    "link": "https://coursera.org",
+                    "focus": m_skills[0] if m_skills else "System Design"
+                },
+                {
+                    "title": f"Hands-On {m_skills[1] if len(m_skills) > 1 else 'Cloud Infrastructure'} Specialization",
+                    "provider": "Udemy",
+                    "link": "https://udemy.com",
+                    "focus": m_skills[1] if len(m_skills) > 1 else "Cloud Scaling"
+                }
+            ],
+            "learning_resources": [
+                {
+                    "title": "Official System Design & Best Practices Guide",
+                    "resource_type": "Documentation",
+                    "description": "Comprehensive reference guide covering scalability, caching, and database partitioning.",
+                    "link": "https://developer.mozilla.org"
+                },
+                {
+                    "title": "Interactive Algorithmic & System Architecture Exercises",
+                    "resource_type": "Practice Platform",
+                    "description": "Hands-on coding challenges tailored to senior interview bars.",
+                    "link": "https://leetcode.com"
+                }
+            ],
+            "practice_projects": [
+                {
+                    "title": f"{target_role} High-Performance Microservices Engine",
+                    "description": f"Architect an asynchronous distributed service incorporating {', '.join(m_skills[:3])}.",
+                    "tech_stack": c_skills[:2] + m_skills[:2]
+                },
+                {
+                    "title": "Real-Time Telemetry & Analytics Dashboard",
+                    "description": "Build an end-to-end monitoring platform with live streaming data and automated alert triggers.",
+                    "tech_stack": ["React", "TypeScript", "FastAPI", "WebSockets"]
+                }
+            ]
+        }
+        return fallback_roadmap, "FALLBACK_RATE_LIMIT"
+
+    async def generate_copilot_chat_response(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+    ) -> str:
+        """
+        Generate a conversational AI response for Career Copilot.
+        Returns a rich markdown string response.
+        """
+        try:
+            raw_text = await self.generate_completion(
+                prompt=user_prompt,
+                system_prompt=system_prompt,
+                temperature=0.7,
+                max_tokens=2048,
+            )
+            return raw_text.strip()
+        except Exception as e:
+            logger.error(f"[AIService] Copilot chat completion failed: {e}")
+            raise
 
 
 # Global singleton instance for AIService

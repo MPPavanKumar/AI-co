@@ -3,11 +3,20 @@ import { useDropzone } from 'react-dropzone'
 import {
   Upload, FileText, CheckCircle, XCircle, Lightbulb,
   TrendingUp, AlertTriangle, Target, Clock, ChevronDown,
-  ChevronUp, Sparkles, RefreshCw, Star, Trash2,
+  ChevronUp, Sparkles, RefreshCw, Star, Trash2, Edit2, Check, X,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { useUploadResume, useResumeAnalyses, useResumeById, useDeleteResumeAnalysis } from '../hooks/useResume'
+import {
+  useUploadResume,
+  useResumeAnalyses,
+  useResumeById,
+  useRenameResume,
+  useSetActiveResume,
+  useDeleteResumeAnalysis,
+} from '../hooks/useResume'
 import type { ResumeAnalysis, ResumeListItem } from '../types/resume'
+import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
 
 // ── ATS Score Ring ────────────────────────────────────────────────────────────
 function ATSScoreRing({ score }: { score: number }) {
@@ -79,7 +88,7 @@ function UploadZone({ onUpload, isUploading }: { onUpload: (f: File) => void; is
     <div
       {...getRootProps()}
       className={clsx(
-        'relative border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all duration-300',
+        'relative border-2 border-dashed rounded-2xl p-6 text-center cursor-pointer transition-all duration-300',
         isDragActive
           ? 'border-indigo-500 bg-indigo-500/10 scale-[1.02]'
           : 'border-[#1e1e3f] hover:border-indigo-500/50 hover:bg-indigo-500/5',
@@ -87,34 +96,30 @@ function UploadZone({ onUpload, isUploading }: { onUpload: (f: File) => void; is
       )}
     >
       <input {...getInputProps()} />
-      <div className="flex flex-col items-center gap-3">
+      <div className="flex flex-col items-center gap-2.5">
         <div className={clsx(
-          'w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300',
+          'w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300',
           isDragActive ? 'bg-indigo-500/20 scale-110' : 'bg-[#0f0f20]'
         )}>
           {isUploading
-            ? <RefreshCw className="w-7 h-7 text-indigo-400 animate-spin" />
-            : <Upload className={clsx('w-7 h-7 transition-colors', isDragActive ? 'text-indigo-400' : 'text-gray-500')} />
+            ? <RefreshCw className="w-6 h-6 text-indigo-400 animate-spin" />
+            : <Upload className={clsx('w-6 h-6 transition-colors', isDragActive ? 'text-indigo-400' : 'text-gray-500')} />
           }
         </div>
 
         {isUploading ? (
-          <div className="space-y-2">
-            <p className="text-white font-semibold text-sm">Analyzing your resume...</p>
-            <p className="text-xs text-gray-500">Gemini AI is reviewing. This takes ~10 seconds.</p>
-            <div className="w-40 h-1 bg-[#1e1e3f] rounded-full overflow-hidden mx-auto mt-2">
+          <div className="space-y-1">
+            <p className="text-white font-semibold text-xs">Analyzing resume with OpenRouter AI...</p>
+            <div className="w-36 h-1 bg-[#1e1e3f] rounded-full overflow-hidden mx-auto mt-2">
               <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full animate-pulse w-3/4" />
             </div>
           </div>
         ) : (
           <div>
-            <p className="text-white font-semibold text-sm">
-              {isDragActive ? 'Drop it here!' : 'Drag & drop your resume'}
+            <p className="text-white font-semibold text-xs">
+              {isDragActive ? 'Drop file here!' : 'Upload New Resume PDF'}
             </p>
-            <p className="text-xs text-gray-500 mt-1">
-              or <span className="text-indigo-400 font-medium">click to browse</span>
-            </p>
-            <p className="text-xs text-gray-600 mt-2">PDF only · Max 5 MB</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">PDF only · Max 5 MB</p>
           </div>
         )}
       </div>
@@ -122,10 +127,34 @@ function UploadZone({ onUpload, isUploading }: { onUpload: (f: File) => void; is
   )
 }
 
-// ── History Item ──────────────────────────────────────────────────────────────
+// ── History / Management Item ──────────────────────────────────────────────────
 function HistoryItem({
-  item, isSelected, onClick, onDelete
-}: { item: ResumeListItem; isSelected: boolean; onClick: () => void; onDelete: (e: React.MouseEvent) => void }) {
+  item,
+  isSelected,
+  onClick,
+  onSetActive,
+  onRename,
+  onDelete,
+}: {
+  item: ResumeListItem
+  isSelected: boolean
+  onClick: () => void
+  onSetActive: () => void
+  onRename: (newName: string) => void
+  onDelete: () => void
+}) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [renameText, setRenameText] = useState(item.display_name || item.filename)
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false)
+
+  const handleSaveRename = (e: React.FormEvent) => {
+    e.stopPropagation()
+    if (renameText.trim()) {
+      onRename(renameText.trim())
+    }
+    setIsEditing(false)
+  }
+
   const scoreColor = (s: number | null) => {
     if (!s) return 'text-gray-500'
     if (s >= 80) return 'text-emerald-400'
@@ -133,45 +162,154 @@ function HistoryItem({
     if (s >= 40) return 'text-amber-400'
     return 'text-red-400'
   }
+
   return (
     <div
       onClick={onClick}
       className={clsx(
-        'w-full flex items-center justify-between gap-3 p-3 rounded-xl cursor-pointer transition-all duration-200 group',
+        'w-full p-3.5 rounded-xl border transition-all duration-200 space-y-2',
         isSelected
-          ? 'bg-indigo-500/15 border border-indigo-500/30'
-          : 'hover:bg-[#0f0f20] border border-transparent'
+          ? 'bg-indigo-500/15 border-indigo-500/40'
+          : 'bg-[#0f0f20]/60 hover:bg-[#0f0f20] border-[#1e1e3f]'
       )}
     >
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <div className="w-8 h-8 rounded-lg bg-[#0f0f20] flex items-center justify-center flex-shrink-0">
-          <FileText className="w-4 h-4 text-indigo-400" />
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <div className="w-8 h-8 rounded-lg bg-[#1e1e3f] flex items-center justify-center flex-shrink-0">
+            <FileText className="w-4 h-4 text-indigo-400" />
+          </div>
+
+          <div className="flex-1 min-w-0">
+            {isEditing ? (
+              <form onSubmit={handleSaveRename} className="flex items-center gap-1">
+                <input
+                  type="text"
+                  value={renameText}
+                  onChange={(e) => setRenameText(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-dark-card border border-indigo-500/60 rounded px-2 py-0.5 text-xs text-white focus:outline-none w-full"
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  onClick={handleSaveRename}
+                  className="p-1 text-emerald-400 hover:text-emerald-300"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setIsEditing(false)
+                  }}
+                  className="p-1 text-slate-400 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </form>
+            ) : (
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold text-white truncate">
+                  {item.display_name || item.filename}
+                </p>
+
+                {item.is_active && (
+                  <Badge variant="success" size="sm">
+                    ⭐ Active
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              Uploaded: {new Date(item.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+            </p>
+          </div>
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-white truncate">{item.filename}</p>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {new Date(item.created_at).toLocaleDateString('en-IN', {
-              day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-            })}
-          </p>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className={clsx('text-sm font-extrabold', scoreColor(item.ats_score))}>
+            {item.ats_score ?? '—'}
+          </span>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <span className={clsx('text-base font-bold flex-shrink-0', scoreColor(item.ats_score))}>
-          {item.ats_score ?? '—'}
-        </span>
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation()
-            onDelete(e)
-          }}
-          className="p-1 text-[#64748b] hover:text-red-400 rounded-lg hover:bg-[#1e1e3f] transition-colors opacity-80 group-hover:opacity-100"
-          title="Delete Resume Analysis"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+
+      {/* Action buttons bar */}
+      <div className="flex items-center justify-between pt-2 border-t border-[#1e1e3f]/60 text-[11px]">
+        {!item.is_active ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              onSetActive()
+            }}
+            className="text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1"
+          >
+            <Star className="w-3 h-3" /> Set Active
+          </button>
+        ) : (
+          <span className="text-emerald-400 font-medium text-[10px]">Active for AI Modules</span>
+        )}
+
+        <div className="flex items-center gap-2">
+          {!isEditing && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsEditing(true)
+              }}
+              className="text-slate-400 hover:text-white flex items-center gap-1"
+              title="Rename Resume"
+            >
+              <Edit2 className="w-3 h-3" /> Rename
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              setShowConfirmDelete(true)
+            }}
+            className="text-slate-400 hover:text-red-400 flex items-center gap-1"
+            title="Delete Resume"
+          >
+            <Trash2 className="w-3 h-3" /> Delete
+          </button>
+        </div>
       </div>
+
+      {/* Confirmation Dialog Overlay */}
+      {showConfirmDelete && (
+        <div className="p-3 rounded-lg bg-red-950/80 border border-red-500/40 space-y-2 mt-2">
+          <p className="text-[11px] font-semibold text-red-200">Delete this resume?</p>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowConfirmDelete(false)
+              }}
+              className="px-2 py-0.5 rounded bg-dark-card text-slate-300 text-[10px]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowConfirmDelete(false)
+                onDelete()
+              }}
+              className="px-2 py-0.5 rounded bg-red-600 hover:bg-red-500 text-white text-[10px] font-bold"
+            >
+              Confirm Delete
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -210,11 +348,16 @@ function AnalysisResults({ analysis }: { analysis: ResumeAnalysis }) {
       </div>
 
       {/* File info strip */}
-      <div className="glass-card px-4 py-3 flex items-center gap-3">
-        <FileText className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-        <span className="text-sm text-white font-medium truncate">{analysis.filename}</span>
+      <div className="glass-card px-4 py-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <FileText className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+          <span className="text-sm text-white font-medium truncate">
+            {analysis.display_name || analysis.filename}
+          </span>
+          {analysis.is_active && <Badge variant="success">Active Resume</Badge>}
+        </div>
         {analysis.file_size && (
-          <span className="text-xs text-gray-500 ml-auto flex-shrink-0">
+          <span className="text-xs text-gray-500 flex-shrink-0">
             {(analysis.file_size / 1024).toFixed(1)} KB
           </span>
         )}
@@ -362,11 +505,15 @@ function LoadingSkeleton() {
 export default function ResumePage() {
   const { mutate: uploadResume, isPending: isUploading, data: uploadResult } = useUploadResume()
   const { data: analyses } = useResumeAnalyses()
+  const renameMutation = useRenameResume()
+  const setActiveMutation = useSetActiveResume()
   const deleteAnalysisMutation = useDeleteResumeAnalysis()
+
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const { data: selectedAnalysis } = useResumeById(selectedId)
 
-  const displayAnalysis = selectedAnalysis ?? uploadResult?.analysis ?? null
+  const activeResume = analyses?.find((r) => r.is_active)
+  const displayAnalysis = selectedAnalysis ?? uploadResult?.analysis ?? (activeResume ? null : null)
 
   const handleUpload = useCallback(
     (file: File) => {
@@ -377,60 +524,52 @@ export default function ResumePage() {
   )
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="mb-7">
+      <div>
         <div className="flex items-center gap-2 mb-1">
           <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
           <span className="text-xs text-indigo-400 font-medium uppercase tracking-wider">AI Powered</span>
         </div>
-        <h1 className="text-2xl font-bold text-white">Resume Analyzer</h1>
-        <p className="text-gray-500 text-sm mt-1">
-          Upload your PDF resume and get an ATS score, skill gap analysis, and actionable improvements.
+        <h1 className="text-2xl font-bold text-white">Resume Management & Analyzer</h1>
+        <p className="text-gray-400 text-sm mt-1">
+          Upload multiple resumes, set an active resume for AI placement modules, rename entries, and review ATS scores.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
-        {/* Left column: Upload + History */}
-        <div className="lg:col-span-1 space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left column: Upload + History / Resume Management List */}
+        <div className="lg:col-span-4 space-y-5">
           <div className="glass-card p-4">
             <UploadZone onUpload={handleUpload} isUploading={isUploading} />
           </div>
 
-          {/* Tips */}
-          <div className="glass-card p-4 space-y-2">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Tips</p>
-            {[
-              'Use a single-column ATS-friendly layout',
-              'Include measurable achievements',
-              'Match keywords from the job description',
-            ].map((tip, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <Star className="w-3 h-3 text-amber-400 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-gray-400">{tip}</p>
+          {/* Resume History List */}
+          <div className="glass-card p-4 space-y-3">
+            <div className="flex items-center justify-between border-b border-[#1e1e3f] pb-3">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-indigo-400" />
+                <span className="text-sm font-bold text-white">My Resumes</span>
               </div>
-            ))}
-          </div>
+              <Badge variant="primary" size="sm">
+                {analyses?.length ?? 0} Uploaded
+              </Badge>
+            </div>
 
-          {/* History */}
-          {analyses && analyses.length > 0 && (
-            <div className="glass-card p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Clock className="w-4 h-4 text-gray-500" />
-                <span className="text-sm font-medium text-white">History</span>
-                <span className="ml-auto text-xs bg-[#1e1e3f] text-gray-400 px-2 py-0.5 rounded-full">
-                  {analyses.length}
-                </span>
+            {!analyses || analyses.length === 0 ? (
+              <div className="text-center py-6 text-xs text-gray-500">
+                No resumes uploaded yet. Upload a PDF resume above to get started!
               </div>
-              <div className="space-y-1">
+            ) : (
+              <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
                 {analyses.map((item) => (
                   <HistoryItem
                     key={item.id}
                     item={item}
-                    isSelected={selectedId === item.id}
-                    onClick={() => {
-                      setSelectedId(item.id)
-                    }}
+                    isSelected={selectedId === item.id || (!selectedId && Boolean(item.is_active))}
+                    onClick={() => setSelectedId(item.id)}
+                    onSetActive={() => setActiveMutation.mutate(item.id)}
+                    onRename={(newName) => renameMutation.mutate({ id: item.id, display_name: newName })}
                     onDelete={() => {
                       if (selectedId === item.id) setSelectedId(null)
                       deleteAnalysisMutation.mutate(item.id)
@@ -438,12 +577,12 @@ export default function ResumePage() {
                   />
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Right column: Results */}
-        <div className="lg:col-span-3">
+        <div className="lg:col-span-8">
           {isUploading && <LoadingSkeleton />}
 
           {!isUploading && displayAnalysis && (
@@ -455,10 +594,9 @@ export default function ResumePage() {
               <div className="w-20 h-20 rounded-3xl bg-indigo-500/10 flex items-center justify-center mb-6">
                 <Target className="w-10 h-10 text-indigo-400" />
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">Ready to Analyze</h3>
-              <p className="text-gray-500 text-sm max-w-xs">
-                Upload your PDF resume on the left to get your ATS score, detect skill gaps,
-                and receive AI-powered improvement tips.
+              <h3 className="text-lg font-semibold text-white mb-2">Select a Resume to View AI Analysis</h3>
+              <p className="text-gray-400 text-xs max-w-sm">
+                Select any resume from your history list on the left or upload a new PDF resume to view ATS scores, skill gaps, and AI improvement suggestions.
               </p>
             </div>
           )}

@@ -13,10 +13,32 @@ from schemas.interview import (
     InterviewGenerateRequest,
     SingleQuestionEvaluateRequest,
     InterviewSessionResponse,
+    InterviewAnswerFeedbackRequest,
+    InterviewAnswerFeedbackResponse,
 )
 from services.interview_service import InterviewService
 
 router = APIRouter(prefix="/interview", tags=["AI Mock Interviews"])
+
+
+@router.post(
+    "/feedback",
+    response_model=InterviewAnswerFeedbackResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Evaluate candidate interview answer and return AI feedback with score explanations & hiring recommendation",
+)
+async def evaluate_interview_feedback(
+    data: InterviewAnswerFeedbackRequest,
+    current_user: User = Depends(get_current_user),
+) -> InterviewAnswerFeedbackResponse:
+    eval_result = await InterviewService.evaluate_answer_feedback(
+        question=data.question,
+        question_type=data.question_type,
+        user_answer=data.user_answer,
+        user_code=data.user_code,
+        selected_language=data.selected_language,
+    )
+    return InterviewAnswerFeedbackResponse(**eval_result)
 
 
 @router.post(

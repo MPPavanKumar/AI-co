@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
+import { clsx } from 'clsx'
 import {
-  Brain, Sparkles, CheckCircle2, Trash2, Award, BookOpen, Layers, Clock, Code2, AlertTriangle, BookmarkCheck, Check
+  Brain, Sparkles, CheckCircle2, Trash2, Award, BookOpen, Layers, Clock, Code2, AlertTriangle, BookmarkCheck, Check, Copy, ShieldCheck
 } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'
@@ -30,9 +31,41 @@ const DEFAULT_STARTER_TEMPLATES: Record<ProgrammingLanguage, string> = {
   cpp: `// C++ Solution\n#include <iostream>\nusing namespace std;\n\nvoid solve() {\n    // Write your algorithmic logic here\n}\n`,
 }
 
+const PREDEFINED_ROLES = [
+  'Full Stack Software Engineer',
+  'Frontend Software Engineer',
+  'Backend Software Engineer',
+  'Data Structures & Algorithms (DSA)',
+  'System Design Architect',
+  'DevOps & Cloud Engineer',
+  'Data Scientist & ML Engineer',
+  'Mobile App Developer (Android / iOS)',
+  'Custom Role',
+]
+
+const PREDEFINED_COMPANIES = [
+  'Google',
+  'Amazon',
+  'Microsoft',
+  'Meta',
+  'Apple',
+  'Netflix',
+  'Uber',
+  'Atlassian',
+  'Flipkart',
+  'TCS / Infosys / Wipro',
+  'Custom Company',
+]
+
 export default function InterviewPage() {
-  const [role, setRole] = useState('Full Stack Developer')
-  const [companyName, setCompanyName] = useState('Target Tech')
+  const [selectedRole, setSelectedRole] = useState('Full Stack Software Engineer')
+  const [customRole, setCustomRole] = useState('')
+  
+  const [selectedCompany, setSelectedCompany] = useState('Google')
+  const [customCompany, setCustomCompany] = useState('')
+
+  const effectiveRole = selectedRole === 'Custom Role' ? customRole : selectedRole
+  const effectiveCompany = selectedCompany === 'Custom Company' ? customCompany : selectedCompany
 
   // Active Session & Multi-Question Local State
   const [activeSession, setActiveSession] = useState<InterviewSession | null>(null)
@@ -74,6 +107,37 @@ export default function InterviewPage() {
     }
   }, [activeSession?.id])
 
+  // Auto-sync active session with sessions list to prevent 404 stale session errors
+  useEffect(() => {
+    if (!sessions || sessions.length === 0) {
+      if (activeSession) setActiveSession(null)
+      return
+    }
+
+    if (!activeSession) {
+      setActiveSession(sessions[0])
+      return
+    }
+
+    // Verify if activeSession still exists in server sessions list
+    const exists = sessions.find((s) => s.id === activeSession.id)
+    if (!exists) {
+      setActiveSession(sessions[0])
+    }
+  }, [sessions, activeSession?.id])
+
+  const handleDeleteSession = async (sessionId: string) => {
+    try {
+      await deleteMutation.mutateAsync(sessionId)
+      if (activeSession?.id === sessionId) {
+        const remaining = sessions?.filter((s) => s.id !== sessionId) ?? []
+        setActiveSession(remaining[0] ?? null)
+      }
+    } catch {
+      // Toast handles error
+    }
+  }
+
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
@@ -82,10 +146,13 @@ export default function InterviewPage() {
 
   const handleStartSession = async (e: React.FormEvent) => {
     e.preventDefault()
+    const finalRole = effectiveRole.trim() || 'Full Stack Software Engineer'
+    const finalCompany = effectiveCompany.trim() || 'Google'
+
     try {
       const session = await generateMutation.mutateAsync({
-        role,
-        company_name: companyName,
+        role: finalRole,
+        company_name: finalCompany,
       })
       setActiveSession(session)
       setCurrentQIndex(0)
@@ -195,24 +262,94 @@ export default function InterviewPage() {
             </h2>
 
             <form onSubmit={handleStartSession} className="space-y-4">
-              <Input
-                label="Target Role"
-                placeholder="e.g. Senior Backend Engineer"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                required
-              />
+              {/* 1. Target Role Dropdown */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Target Role
+                </label>
+                <select
+                  value={selectedRole}
+                  onChange={(e) => setSelectedRole(e.target.value)}
+                  className="w-full bg-[#1e1e3f]/60 border border-[#2d2d5a] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                >
+                  {PREDEFINED_ROLES.map((r) => (
+                    <option key={r} value={r} className="bg-[#0f0f20] text-white">
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-              <Input
-                label="Company Name"
-                placeholder="e.g. Google, Microsoft, Meta"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-              />
+              {/* Custom Role Input */}
+              {selectedRole === 'Custom Role' && (
+                <Input
+                  label="Enter Custom Role"
+                  placeholder="e.g. Lead iOS Developer"
+                  value={customRole}
+                  onChange={(e) => setCustomRole(e.target.value)}
+                  required
+                />
+              )}
+
+              {/* 2. Target Company Dropdown */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Target Company
+                </label>
+                <select
+                  value={selectedCompany}
+                  onChange={(e) => setSelectedCompany(e.target.value)}
+                  className="w-full bg-[#1e1e3f]/60 border border-[#2d2d5a] rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                >
+                  {PREDEFINED_COMPANIES.map((c) => (
+                    <option key={c} value={c} className="bg-[#0f0f20] text-white">
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Custom Company Input */}
+              {selectedCompany === 'Custom Company' && (
+                <Input
+                  label="Enter Custom Company Name"
+                  placeholder="e.g. Google, OpenAI, Stripe"
+                  value={customCompany}
+                  onChange={(e) => setCustomCompany(e.target.value)}
+                  required
+                />
+              )}
+
+              {/* Quick Company Selection Badges */}
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[11px] text-slate-400 font-medium block">
+                  Quick Select Target Tech Giant:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {['Google', 'Amazon', 'Microsoft', 'Meta', 'Apple', 'Netflix', 'Uber'].map((comp) => (
+                    <button
+                      key={comp}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCompany(comp)
+                        setCustomCompany('')
+                      }}
+                      className={clsx(
+                        'px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
+                        selectedCompany === comp
+                          ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300 font-bold'
+                          : 'bg-[#1e1e3f]/40 border-[#2d2d5a] text-slate-400 hover:text-white hover:border-slate-500'
+                      )}
+                    >
+                      {comp}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full mt-2"
                 isLoading={generateMutation.isPending}
                 leftIcon={<Brain className="w-4 h-4" />}
               >
@@ -252,7 +389,7 @@ export default function InterviewPage() {
 
                     <button
                       type="button"
-                      onClick={() => deleteMutation.mutate(s.id)}
+                      onClick={() => handleDeleteSession(s.id)}
                       className="p-1.5 text-slate-400 hover:text-red-400 rounded-lg hover:bg-dark-card transition-colors"
                       title="Delete Session"
                     >
@@ -572,64 +709,166 @@ export default function InterviewPage() {
 
                     {/* Live Per-Question Evaluation Card */}
                     {getQuestionFeedback(currentQ.id) && (
-                      <Card padding="md" className="bg-dark-card/90 border-primary-500/40 space-y-3 mt-4">
-                        <div className="flex items-center justify-between border-b border-dark-border pb-2">
-                          <h4 className="text-xs font-bold text-primary-300 uppercase tracking-wider flex items-center gap-1.5">
-                            <Check className="w-4 h-4 text-emerald-400" />
-                            Live Evaluation Result
-                          </h4>
-                          <Badge variant="success">
-                            Score: {getQuestionFeedback(currentQ.id)?.score}/100
-                          </Badge>
-                        </div>
+                      <Card padding="md" className="bg-dark-card/95 border-primary-500/50 space-y-4 mt-6 shadow-2xl animate-fade-in">
+                        {/* Header & Hiring Recommendation Badge */}
+                        {(() => {
+                          const fb = getQuestionFeedback(currentQ.id)
+                          if (!fb) return null
 
-                        {/* DSA Complexity Grid */}
-                        {currentQ.question_type === 'dsa' && (
-                          <div className="grid grid-cols-4 gap-2 text-[11px] text-center bg-dark-surface p-2 rounded-lg border border-dark-border">
-                            <div>
-                              <span className="text-slate-400 block">Time</span>
-                              <span className="font-bold text-emerald-400">
-                                {getQuestionFeedback(currentQ.id)?.time_complexity}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-slate-400 block">Space</span>
-                              <span className="font-bold text-violet-400">
-                                {getQuestionFeedback(currentQ.id)?.space_complexity}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-slate-400 block">Readability</span>
-                              <span className="font-bold text-primary-300">
-                                {getQuestionFeedback(currentQ.id)?.code_readability}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-slate-400 block">Edge Cases</span>
-                              <span className="font-bold text-amber-300">
-                                {getQuestionFeedback(currentQ.id)?.edge_cases}
-                              </span>
-                            </div>
-                          </div>
-                        )}
+                          const rec = fb.hiring_recommendation || 'Hire'
+                          let recBg = 'bg-primary-500/20 text-primary-300 border-primary-500/40'
+                          if (rec.includes('Strong')) recBg = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                          else if (rec.includes('Lean Hire')) recBg = 'bg-violet-500/20 text-violet-300 border-violet-500/40'
+                          else if (rec.includes('No Hire')) recBg = 'bg-rose-500/20 text-rose-300 border-rose-500/40'
 
-                        <div className="text-xs text-slate-300 space-y-1">
-                          <p>
-                            <strong className="text-emerald-400">Correctness: </strong>
-                            {getQuestionFeedback(currentQ.id)?.correctness}
-                          </p>
-                        </div>
+                          return (
+                            <>
+                              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-dark-border pb-3">
+                                <div>
+                                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                    <Sparkles className="w-4 h-4 text-primary-400" />
+                                    AI Interview Feedback & Evaluation
+                                  </h4>
+                                  {fb.recommendation_reason && (
+                                    <p className="text-xs text-slate-400 mt-1">{fb.recommendation_reason}</p>
+                                  )}
+                                </div>
 
-                        {getQuestionFeedback(currentQ.id)?.optimal_solution && (
-                          <div className="pt-2">
-                            <span className="text-xs font-semibold text-primary-400 uppercase">
-                              Optimal Solution Code / Model Answer:
-                            </span>
-                            <pre className="text-[11px] font-mono text-emerald-300 bg-dark-surface p-3 rounded-lg border border-dark-border overflow-x-auto mt-1">
-                              {getQuestionFeedback(currentQ.id)?.optimal_solution}
-                            </pre>
-                          </div>
-                        )}
+                                <div className={`px-3 py-1.5 rounded-xl border text-xs font-extrabold flex items-center gap-1.5 ${recBg}`}>
+                                  <ShieldCheck className="w-4 h-4" />
+                                  Recommendation: {rec}
+                                </div>
+                              </div>
+
+                              {/* 4 Score Metric Cards with Explanations */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                                {/* Overall Score */}
+                                <div className="p-3 rounded-xl bg-dark-surface border border-dark-border text-center space-y-1">
+                                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Overall Score</span>
+                                  <span className="text-2xl font-black text-white">{fb.score}/100</span>
+                                </div>
+
+                                {/* Technical Accuracy */}
+                                <div className="p-3 rounded-xl bg-dark-surface border border-dark-border text-center space-y-1">
+                                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Technical Accuracy</span>
+                                  <span className="text-2xl font-black text-emerald-400">{fb.technical_accuracy ?? fb.score}/100</span>
+                                  {fb.technical_accuracy_explanation && (
+                                    <p className="text-[10px] text-slate-400 line-clamp-2 mt-1">{fb.technical_accuracy_explanation}</p>
+                                  )}
+                                </div>
+
+                                {/* Communication Skills */}
+                                <div className="p-3 rounded-xl bg-dark-surface border border-dark-border text-center space-y-1">
+                                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Communication</span>
+                                  <span className="text-2xl font-black text-violet-400">{fb.communication_skills ?? fb.score}/100</span>
+                                  {fb.communication_explanation && (
+                                    <p className="text-[10px] text-slate-400 line-clamp-2 mt-1">{fb.communication_explanation}</p>
+                                  )}
+                                </div>
+
+                                {/* Confidence */}
+                                <div className="p-3 rounded-xl bg-dark-surface border border-dark-border text-center space-y-1">
+                                  <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Confidence</span>
+                                  <span className="text-2xl font-black text-primary-400">{fb.confidence ?? fb.score}/100</span>
+                                  {fb.confidence_explanation && (
+                                    <p className="text-[10px] text-slate-400 line-clamp-2 mt-1">{fb.confidence_explanation}</p>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* DSA Code Performance Details */}
+                              {currentQ.question_type === 'dsa' && (
+                                <div className="grid grid-cols-4 gap-2 text-[11px] text-center bg-dark-surface p-2.5 rounded-xl border border-dark-border">
+                                  <div>
+                                    <span className="text-slate-400 block">Time Complexity</span>
+                                    <span className="font-bold text-emerald-400">{fb.time_complexity}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400 block">Space Complexity</span>
+                                    <span className="font-bold text-violet-400">{fb.space_complexity}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400 block">Code Readability</span>
+                                    <span className="font-bold text-primary-300">{fb.code_readability}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-slate-400 block">Edge Cases</span>
+                                    <span className="font-bold text-amber-300">{fb.edge_cases}</span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Strengths & Weaknesses */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {fb.strengths && fb.strengths.length > 0 && (
+                                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-1">
+                                    <h5 className="text-xs font-bold text-emerald-400 uppercase flex items-center gap-1.5">
+                                      <CheckCircle2 className="w-3.5 h-3.5" /> Key Strengths
+                                    </h5>
+                                    <ul className="text-xs text-slate-300 space-y-1 list-disc pl-4">
+                                      {fb.strengths.map((s, idx) => (
+                                        <li key={idx}>{s}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+
+                                {fb.weaknesses && fb.weaknesses.length > 0 && (
+                                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-1">
+                                    <h5 className="text-xs font-bold text-amber-400 uppercase flex items-center gap-1.5">
+                                      <AlertTriangle className="w-3.5 h-3.5" /> Weaknesses & Gaps
+                                    </h5>
+                                    <ul className="text-xs text-slate-300 space-y-1 list-disc pl-4">
+                                      {fb.weaknesses.map((w, idx) => (
+                                        <li key={idx}>{w}</li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Suggestions for Improvement */}
+                              {(fb.suggestions_for_improvement || fb.improvement_suggestions) && (
+                                <div className="p-3 rounded-xl bg-primary-500/10 border border-primary-500/20 space-y-1">
+                                  <h5 className="text-xs font-bold text-primary-300 uppercase flex items-center gap-1.5">
+                                    <Sparkles className="w-3.5 h-3.5" /> Suggestions for Improvement
+                                  </h5>
+                                  <ul className="text-xs text-slate-300 space-y-1 list-disc pl-4">
+                                    {(fb.suggestions_for_improvement || fb.improvement_suggestions || []).map((sug, idx) => (
+                                      <li key={idx}>{sug}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {/* Better Sample Answer */}
+                              {(fb.better_sample_answer || fb.optimal_solution) && (
+                                <div className="space-y-1.5 pt-1">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                                      <Code2 className="w-4 h-4" />
+                                      Better Sample Answer / Model Solution:
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => {
+                                        const textToCopy = fb.better_sample_answer || fb.optimal_solution || ''
+                                        navigator.clipboard.writeText(textToCopy)
+                                      }}
+                                    >
+                                      <Copy className="w-3 h-3 mr-1" />
+                                      Copy Answer
+                                    </Button>
+                                  </div>
+                                  <pre className="text-xs font-mono text-emerald-300 bg-dark-surface p-4 rounded-xl border border-dark-border overflow-x-auto whitespace-pre-wrap leading-relaxed">
+                                    {fb.better_sample_answer || fb.optimal_solution}
+                                  </pre>
+                                </div>
+                              )}
+                            </>
+                          )
+                        })()}
                       </Card>
                     )}
                   </div>

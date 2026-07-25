@@ -1,9 +1,9 @@
 """
-Resume Analyzer service:
+Resume Analyzer & Resume Management service:
   1. Extract text from uploaded PDF using pdfplumber
   2. Send extracted text to OpenRouter via AIService
   3. Parse structured JSON response
-  4. Store results in PostgreSQL
+  4. Manage multiple resumes: upload, rename, set active, delete
 """
 import io
 import json
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pdfplumber
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import select, desc
+from sqlalchemy import select, update, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import settings
@@ -46,14 +46,8 @@ def extract_text_from_pdf(file_bytes: bytes) -> str:
 
 # ── OpenRouter AI Analysis ───────────────────────────────────────────────────
 
-from services.ai_service import get_ai_service
-
 async def analyze_with_ai(resume_text: str) -> tuple[dict, str]:
-    """
-    Delegate resume analysis to AIService (OpenRouter API).
-    Never silently falls back to mock data if key is missing or fails;
-    returns clear HTTP error status codes.
-    """
+    """Delegate resume analysis to AIService (OpenRouter API)."""
     key = settings.OPENROUTER_API_KEY.strip() if settings.OPENROUTER_API_KEY else ""
     if not key or key in ("your-openrouter-api-key-here", ""):
         raise HTTPException(
@@ -102,7 +96,7 @@ async def analyze_with_ai(resume_text: str) -> tuple[dict, str]:
         ) from e
 
 
-# ── Database Operations ───────────────────────────────────────────────────────
+# ── Database & Management Operations ───────────────────────────────────────────
 
 class ResumeService:
 
@@ -133,9 +127,26 @@ class ResumeService:
 
         analysis_data, raw_response = await analyze_with_ai(extracted_text)
 
+        # Check if user currently has any resumes
+        existing_res_q = await db.execute(
+            select(func.count(ResumeAnalysis.id)).where(ResumeAnalysis.user_id == user_id)
+        )
+        existing_count = existing_res_q.scalar_one_or_none() or 0
+        should_be_active = (existing_count == 0)  # First resume is automatically active
+
+        if should_be_active:
+            # Unset any legacy active resumes for safety
+            await db.execute(
+                update(ResumeAnalysis)
+                .where(ResumeAnalysis.user_id == user_id)
+                .values(is_active=False)
+            )
+
         analysis = ResumeAnalysis(
             user_id=user_id,
             filename=file.filename,
+            display_name=file.filename,
+            is_active=should_be_active,
             file_size=file_size,
             extracted_text=extracted_text[:50000],
             ats_score=analysis_data["ats_score"],
@@ -148,18 +159,19 @@ class ResumeService:
         )
         db.add(analysis)
         await db.flush()
+        await db.commit()
         await db.refresh(analysis)
         return analysis
 
     @staticmethod
     async def get_user_analyses(
-        db: AsyncSession, user_id: uuid.UUID, limit: int = 20
+        db: AsyncSession, user_id: uuid.UUID, limit: int = 50
     ) -> list[ResumeAnalysis]:
-        """Get all resume analyses for a user, newest first."""
+        """Get all resume analyses for a user, sorted by active status & creation date."""
         result = await db.execute(
             select(ResumeAnalysis)
             .where(ResumeAnalysis.user_id == user_id)
-            .order_by(desc(ResumeAnalysis.created_at))
+            .order_by(desc(ResumeAnalysis.is_active), desc(ResumeAnalysis.created_at))
             .limit(limit)
         )
         return list(result.scalars().all())
@@ -177,28 +189,88 @@ class ResumeService:
         )
         analysis = result.scalar_one_or_none()
         if not analysis:
-            raise HTTPException(status_code=404, detail="Analysis not found.")
+            raise HTTPException(status_code=404, detail="Resume analysis not found.")
         return analysis
 
     @staticmethod
     async def get_latest(
         db: AsyncSession, user_id: uuid.UUID
     ) -> ResumeAnalysis | None:
-        """Get the most recent analysis for a user."""
-        result = await db.execute(
+        """Get active resume if set, otherwise fallback to the most recent upload."""
+        active_q = await db.execute(
+            select(ResumeAnalysis)
+            .where(ResumeAnalysis.user_id == user_id, ResumeAnalysis.is_active == True)
+            .order_by(desc(ResumeAnalysis.created_at))
+            .limit(1)
+        )
+        active_resume = active_q.scalar_one_or_none()
+        if active_resume:
+            return active_resume
+
+        # Fallback to latest created
+        latest_q = await db.execute(
             select(ResumeAnalysis)
             .where(ResumeAnalysis.user_id == user_id)
             .order_by(desc(ResumeAnalysis.created_at))
             .limit(1)
         )
-        return result.scalar_one_or_none()
+        return latest_q.scalar_one_or_none()
+
+    @staticmethod
+    async def rename_resume(
+        db: AsyncSession, resume_id: uuid.UUID, user_id: uuid.UUID, display_name: str
+    ) -> ResumeAnalysis:
+        """Rename display_name of a resume."""
+        resume = await ResumeService.get_analysis_by_id(db, resume_id, user_id)
+        resume.display_name = display_name.strip()
+        db.add(resume)
+        await db.commit()
+        await db.refresh(resume)
+        return resume
+
+    @staticmethod
+    async def set_active_resume(
+        db: AsyncSession, resume_id: uuid.UUID, user_id: uuid.UUID
+    ) -> ResumeAnalysis:
+        """Set specified resume as active and unset all other user resumes."""
+        resume = await ResumeService.get_analysis_by_id(db, resume_id, user_id)
+
+        # Unset all other resumes
+        await db.execute(
+            update(ResumeAnalysis)
+            .where(ResumeAnalysis.user_id == user_id)
+            .values(is_active=False)
+        )
+
+        resume.is_active = True
+        db.add(resume)
+        await db.commit()
+        await db.refresh(resume)
+        return resume
 
     @staticmethod
     async def delete_analysis(
         db: AsyncSession, analysis_id: uuid.UUID, user_id: uuid.UUID
     ) -> bool:
-        """Delete a resume analysis owned by the user."""
+        """Delete a resume analysis owned by user. If active, promote next latest resume as active."""
         analysis = await ResumeService.get_analysis_by_id(db, analysis_id, user_id)
+        was_active = analysis.is_active
+
         await db.delete(analysis)
         await db.commit()
+
+        if was_active:
+            # Promote latest remaining resume to active
+            next_latest_q = await db.execute(
+                select(ResumeAnalysis)
+                .where(ResumeAnalysis.user_id == user_id)
+                .order_by(desc(ResumeAnalysis.created_at))
+                .limit(1)
+            )
+            next_latest = next_latest_q.scalar_one_or_none()
+            if next_latest:
+                next_latest.is_active = True
+                db.add(next_latest)
+                await db.commit()
+
         return True

@@ -9,7 +9,9 @@ export function useUploadResume() {
     mutationFn: (file: File) => resumeApi.upload(file),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['resume-analyses'] })
-      toast.success('Resume analyzed successfully! 🎯')
+      queryClient.invalidateQueries({ queryKey: ['resume-latest'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard_summary'] })
+      toast.success('Resume uploaded & analyzed successfully! 🎯')
     },
     onError: (error) => {
       toast.error(getApiErrorMessage(error))
@@ -39,6 +41,39 @@ export function useResumeById(id: string | null) {
   })
 }
 
+export function useRenameResume() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, display_name }: { id: string; display_name: string }) =>
+      resumeApi.renameResume(id, display_name),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resume-analyses'] })
+      queryClient.invalidateQueries({ queryKey: ['resume-latest'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard_summary'] })
+      toast.success('Resume renamed!')
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error))
+    },
+  })
+}
+
+export function useSetActiveResume() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => resumeApi.setActiveResume(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['resume-analyses'] })
+      queryClient.invalidateQueries({ queryKey: ['resume-latest'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard_summary'] })
+      toast.success('Active resume updated! ⭐')
+    },
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error))
+    },
+  })
+}
+
 export function useDeleteResumeAnalysis() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -46,7 +81,8 @@ export function useDeleteResumeAnalysis() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['resume-analyses'] })
       queryClient.invalidateQueries({ queryKey: ['resume-latest'] })
-      toast.success('Resume analysis deleted successfully!')
+      queryClient.invalidateQueries({ queryKey: ['dashboard_summary'] })
+      toast.success('Resume deleted successfully!')
     },
     onError: (error) => {
       toast.error(getApiErrorMessage(error))

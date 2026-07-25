@@ -24,6 +24,30 @@ export interface SingleQuestionEvaluateRequest {
   expected_key_points?: string[]
 }
 
+export interface InterviewAnswerFeedbackRequest {
+  question: string
+  question_type?: QuestionType
+  user_answer?: string
+  user_code?: string
+  selected_language?: ProgrammingLanguage
+}
+
+export interface InterviewAnswerFeedbackResponse {
+  overall_score: number
+  technical_accuracy: number
+  technical_accuracy_explanation: string
+  communication_skills: number
+  communication_explanation: string
+  confidence: number
+  confidence_explanation: string
+  hiring_recommendation: string
+  recommendation_reason: string
+  strengths: string[]
+  weaknesses: string[]
+  suggestions_for_improvement: string[]
+  better_sample_answer: string
+}
+
 export interface QuestionFeedback {
   question_id: number
   question: string
@@ -33,6 +57,14 @@ export interface QuestionFeedback {
   selected_language?: ProgrammingLanguage
   status: QuestionStatus
   score: number
+  technical_accuracy?: number
+  technical_accuracy_explanation?: string
+  communication_skills?: number
+  communication_explanation?: string
+  confidence?: number
+  confidence_explanation?: string
+  hiring_recommendation?: string
+  recommendation_reason?: string
   correctness: string
   time_complexity: string
   space_complexity: string
@@ -42,6 +74,8 @@ export interface QuestionFeedback {
   weaknesses: string[]
   optimal_solution: string
   improvement_suggestions: string[]
+  suggestions_for_improvement?: string[]
+  better_sample_answer?: string
 }
 
 export interface InterviewSession {

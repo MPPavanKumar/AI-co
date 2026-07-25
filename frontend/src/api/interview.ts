@@ -3,9 +3,18 @@ import type {
   InterviewSession,
   InterviewGenerateRequest,
   SingleQuestionEvaluateRequest,
+  InterviewAnswerFeedbackRequest,
+  InterviewAnswerFeedbackResponse,
 } from '../types/interview'
 
 export const interviewApi = {
+  evaluateAnswerFeedback: async (
+    data: InterviewAnswerFeedbackRequest
+  ): Promise<InterviewAnswerFeedbackResponse> => {
+    const res = await apiClient.post<InterviewAnswerFeedbackResponse>('/interview/feedback', data)
+    return res.data
+  },
+
   generateSession: async (data: InterviewGenerateRequest): Promise<InterviewSession> => {
     const res = await apiClient.post<InterviewSession>('/interview/generate', data)
     return res.data
