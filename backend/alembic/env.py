@@ -17,7 +17,7 @@ from models import user  # noqa: F401 — registers User model with metadata
 
 config = context.config
 
-# Override sqlalchemy.url from our settings (handles both local and Neon URLs)
+# Override sqlalchemy.url from our settings (handles both local and Neon URLs cleanly)
 config.set_main_option("sqlalchemy.url", settings.async_database_url)
 
 if config.config_file_name is not None:
@@ -46,10 +46,18 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
+    """Run async migrations online supporting both Neon SSL and SQLite connections."""
+    connect_args = {}
+    if settings.is_postgres and settings.ssl_required:
+        connect_args["ssl"] = "require"
+    elif settings.is_sqlite:
+        connect_args["check_same_thread"] = False
+
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

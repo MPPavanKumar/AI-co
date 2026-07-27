@@ -12,7 +12,8 @@ from sqlalchemy.orm import DeclarativeBase
 from .config import settings
 
 db_url = settings.async_database_url
-is_sqlite = db_url.startswith("sqlite")
+is_sqlite = settings.is_sqlite
+is_postgres = settings.is_postgres
 
 engine_kwargs = {
     "echo": settings.DEBUG,
@@ -21,9 +22,11 @@ engine_kwargs = {
 
 if is_sqlite:
     engine_kwargs["connect_args"] = {"check_same_thread": False}
-else:
+elif is_postgres:
     engine_kwargs["pool_size"] = 10
     engine_kwargs["max_overflow"] = 20
+    if settings.ssl_required:
+        engine_kwargs["connect_args"] = {"ssl": "require"}
 
 engine = create_async_engine(db_url, **engine_kwargs)
 
