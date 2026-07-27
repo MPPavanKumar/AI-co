@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /docs
+Disallow: /openapi.json
+
+Sitemap: https://ai-co-1.onrender.com/sitemap.xml
