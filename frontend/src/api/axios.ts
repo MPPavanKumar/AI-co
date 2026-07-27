@@ -2,8 +2,21 @@ import axios from 'axios'
 import type { AxiosError, InternalAxiosRequestConfig } from 'axios'
 import { useAuthStore } from '../store/authStore'
 
-const rawApiUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
-const BASE_URL = rawApiUrl.endsWith('/api/v1') ? rawApiUrl : `${rawApiUrl.replace(/\/+$/, '')}/api/v1`
+const getBaseUrl = (): string => {
+  const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL
+  if (envUrl) {
+    return envUrl.endsWith('/api/v1') ? envUrl : `${envUrl.replace(/\/+$/, '')}/api/v1`
+  }
+
+  // If running in production browser on Render (e.g. ai-co-1.onrender.com):
+  if (typeof window !== 'undefined' && window.location.hostname.includes('onrender.com')) {
+    return 'https://ai-co.onrender.com/api/v1'
+  }
+
+  return 'http://localhost:8000/api/v1'
+}
+
+const BASE_URL = getBaseUrl()
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,
