@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { clsx } from 'clsx'
 import {
-  Brain, Sparkles, CheckCircle2, Trash2, Award, BookOpen, Layers, Clock, Code2, AlertTriangle, BookmarkCheck, Check, Copy, ShieldCheck
+  Brain, Sparkles, CheckCircle2, Trash2, Award, BookOpen, Layers, Clock, Code2, AlertTriangle, BookmarkCheck, Copy, ShieldCheck
 } from 'lucide-react'
 import Card from '../components/ui/Card'
 import Button from '../components/ui/Button'

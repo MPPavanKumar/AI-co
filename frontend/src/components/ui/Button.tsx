@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 import Spinner from './Spinner'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger'
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline'
   size?: 'sm' | 'md' | 'lg'
   isLoading?: boolean
   leftIcon?: React.ReactNode
@@ -16,6 +16,8 @@ const variantClasses = {
     'bg-gradient-to-r from-primary-600 to-violet-600 hover:from-primary-500 hover:to-violet-500 text-white shadow-glow-primary hover:shadow-glow-purple',
   secondary:
     'bg-dark-surface border border-dark-border text-white hover:bg-dark-card hover:border-primary-500/40',
+  outline:
+    'bg-transparent border border-dark-border text-slate-300 hover:text-white hover:bg-dark-surface hover:border-primary-500/40',
   ghost: 'text-dark-muted hover:text-white hover:bg-dark-surface',
   danger: 'bg-red-600/90 hover:bg-red-600 text-white',
 }
@@ -49,8 +51,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           'inline-flex items-center justify-center font-medium rounded-xl',
           'transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500/50',
           'disabled:opacity-50 disabled:cursor-not-allowed',
-          variantClasses[variant],
-          sizeClasses[size],
+          variantClasses[variant] || variantClasses.primary,
+          sizeClasses[size] || sizeClasses.md,
           className
         )}
         {...props}

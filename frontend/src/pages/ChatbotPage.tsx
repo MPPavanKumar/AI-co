@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import {
   Send, Bot, User as UserIcon, Sparkles, Trash2, RefreshCw,
-  Copy, Check, FileText, Target, Award, Calendar, Lightbulb,
-  Zap, Code2, DollarSign, BookOpen, Compass, ChevronRight, MessageSquare
+  Copy, Check, FileText, Target,
+  Zap, Code2, DollarSign, BookOpen, Compass
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useChatHistory, useCopilotContext, useSendMessage, useClearChatHistory } from '../hooks/useChat'

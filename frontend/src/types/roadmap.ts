@@ -1,7 +1,7 @@
 export interface WeeklyPlanItem {
   week: number
   title: string
-  description: str
+  description: string
   objectives: string[]
 }
 

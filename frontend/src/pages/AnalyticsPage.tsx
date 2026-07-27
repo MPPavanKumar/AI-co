@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import {
-  TrendingUp, Award, Target, FileText, Brain, Compass,
-  CheckCircle, AlertTriangle, Lightbulb, Clock, Sparkles, BarChart2,
-  ChevronRight, ArrowUpRight, ShieldCheck, Zap
+  TrendingUp, Target, FileText, Brain, Compass,
+  CheckCircle, AlertTriangle, Lightbulb, Clock, BarChart2,
+  ShieldCheck
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useAnalyticsSummary } from '../hooks/useAnalytics'
 import Badge from '../components/ui/Badge'
-import Button from '../components/ui/Button'
 import type { ScoreTrendPoint } from '../types/analytics'
 
 // ── Circular Gauge Component ──────────────────────────────────────────────────

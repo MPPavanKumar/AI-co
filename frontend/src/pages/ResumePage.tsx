@@ -16,7 +16,6 @@ import {
 } from '../hooks/useResume'
 import type { ResumeAnalysis, ResumeListItem } from '../types/resume'
 import Badge from '../components/ui/Badge'
-import Button from '../components/ui/Button'
 
 // ── ATS Score Ring ────────────────────────────────────────────────────────────
 function ATSScoreRing({ score }: { score: number }) {
