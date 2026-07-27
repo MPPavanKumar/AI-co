@@ -26,15 +26,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # ── Database & Dynamic Migration ──────────────────────────────────────────
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        res = await conn.execute(text("PRAGMA table_info(resume_analyses)"))
-        existing_cols = {row[1] for row in res.fetchall()}
+        if settings.is_sqlite:
+            res = await conn.execute(text("PRAGMA table_info(resume_analyses)"))
+            existing_cols = {row[1] for row in res.fetchall()}
 
-        if "display_name" not in existing_cols:
-            await conn.execute(text("ALTER TABLE resume_analyses ADD COLUMN display_name VARCHAR(255)"))
-        if "is_active" not in existing_cols:
-            await conn.execute(text("ALTER TABLE resume_analyses ADD COLUMN is_active BOOLEAN DEFAULT 0 NOT NULL"))
-        if "updated_at" not in existing_cols:
-            await conn.execute(text("ALTER TABLE resume_analyses ADD COLUMN updated_at DATETIME"))
+            if "display_name" not in existing_cols:
+                await conn.execute(text("ALTER TABLE resume_analyses ADD COLUMN display_name VARCHAR(255)"))
+            if "is_active" not in existing_cols:
+                await conn.execute(text("ALTER TABLE resume_analyses ADD COLUMN is_active BOOLEAN DEFAULT 0 NOT NULL"))
+            if "updated_at" not in existing_cols:
+                await conn.execute(text("ALTER TABLE resume_analyses ADD COLUMN updated_at DATETIME"))
+        elif settings.is_postgres:
+            res = await conn.execute(
+                text("SELECT column_name FROM information_schema.columns WHERE table_name='resume_analyses'")
+            )
+            existing_cols = {row[0] for row in res.fetchall()}
+
+            if "display_name" not in existing_cols:
+                await conn.execute(text("ALTER TABLE resume_analyses ADD COLUMN display_name VARCHAR(255)"))
+            if "is_active" not in existing_cols:
+                await conn.execute(text("ALTER TABLE resume_analyses ADD COLUMN is_active BOOLEAN DEFAULT FALSE NOT NULL"))
+            if "updated_at" not in existing_cols:
+                await conn.execute(text("ALTER TABLE resume_analyses ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE"))
 
     # ── OpenRouter startup validation ─────────────────────────────────────────
     key = settings.OPENROUTER_API_KEY.strip().strip('"').strip("'") if settings.OPENROUTER_API_KEY else ""
